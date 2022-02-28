@@ -15,6 +15,7 @@ add_library(
   velox_exec
   Aggregate.cpp
   AggregationMasks.cpp
+  ArrowStream.cpp
   ContainerRowSerde.cpp
   CrossJoinBuild.cpp
   CrossJoinProbe.cpp
@@ -59,7 +60,8 @@ target_link_libraries(
   velox_connector
   velox_time
   velox_codegen
-  velox_common_base)
+  velox_common_base
+  velox_arrow_bridge)
 
 if(${VELOX_BUILD_TESTING})
   add_subdirectory(tests)

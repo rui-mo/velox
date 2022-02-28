@@ -147,6 +147,15 @@ void ValuesNode::addDetails(std::stringstream& stream) const {
   stream << totalCount << " rows in " << values_.size() << " vectors";
 }
 
+const std::vector<std::shared_ptr<const PlanNode>>& ArrowStreamNode::sources()
+    const {
+  return kEmptySources;
+}
+
+void ArrowStreamNode::addDetails(std::stringstream& stream) const {
+  // Nothing to add.
+}
+
 const std::vector<std::shared_ptr<const PlanNode>>& TableScanNode::sources()
     const {
   return kEmptySources;
