@@ -36,12 +36,14 @@ class SubstraitVeloxExprConverter {
   /// Used to convert Substrait Field into Velox Field Expression.
   std::shared_ptr<const core::FieldAccessTypedExpr> toVeloxExpr(
       const ::substrait::Expression::FieldReference& sField,
-      int32_t inputPlanNodeId);
+      int32_t inputPlanNodeId,
+      const RowTypePtr& inputType);
 
   /// Used to convert Substrait ScalarFunction into Velox Expression.
   std::shared_ptr<const core::ITypedExpr> toVeloxExpr(
       const ::substrait::Expression::ScalarFunction& sFunc,
-      int32_t inputPlanNodeId);
+      int32_t inputPlanNodeId,
+      const RowTypePtr& inputType);
 
   /// Used to convert Substrait Literal into Velox Expression.
   std::shared_ptr<const core::ConstantTypedExpr> toVeloxExpr(
@@ -50,7 +52,8 @@ class SubstraitVeloxExprConverter {
   /// Used to convert Substrait Expression into Velox Expression.
   std::shared_ptr<const core::ITypedExpr> toVeloxExpr(
       const ::substrait::Expression& sExpr,
-      int32_t inputPlanNodeId);
+      int32_t inputPlanNodeId,
+      const RowTypePtr& inputType);
 
  private:
   /// The Substrait parser used to convert Substrait representations into
@@ -59,7 +62,7 @@ class SubstraitVeloxExprConverter {
 
   /// The map storing the relations between the function id and the function
   /// name.
-  std::unordered_map<uint64_t, std::string> functionMap_;
+  std::unordered_map<uint64_t, std::string> functionMap_ = {};
 };
 
 } // namespace facebook::velox::substrait

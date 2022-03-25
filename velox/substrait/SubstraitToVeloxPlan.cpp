@@ -27,147 +27,238 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
   } else {
     VELOX_FAIL("Child Rel is expected in AggregateRel.");
   }
+  core::AggregationNode::Step aggStep;
+  // Get aggregation phase and check if there are input columns need to be combined.
+  if (needsRowConstruct(sAgg, aggStep)) {
+    return toVeloxAggWithRowConstruct(sAgg, childNode, aggStep);
+  }
+  return toVeloxAgg(sAgg, childNode, aggStep);
+}
 
-  // Construct Velox grouping expressions.
-  auto inputTypes = childNode->outputType();
-  std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>>
-      veloxGroupingExprs;
-  const auto& groupings = sAgg.groupings();
-  int inputPlanNodeId = planNodeId_ - 1;
-  // The index of output column.
-  int outIdx = 0;
+std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::createUnifyNode(
+    const std::shared_ptr<const core::PlanNode>& aggNode, uint64_t groupingSize,
+    uint64_t aggSize) {
+  // Construct a Project node to unify the grouping and agg names with different id.
+  uint32_t unifiedOutSize = groupingSize + aggSize;
+  
+  std::vector<std::string> unifiedOutNames;
+  unifiedOutNames.reserve(unifiedOutSize);
+  std::vector<std::shared_ptr<const core::ITypedExpr>> unifyExprs;
+  unifyExprs.reserve(unifiedOutSize);
+
+  uint32_t unifiedColIdx = 0;
+  auto unifyNodeInputType = aggNode->outputType();
+  // Handle grouping columns.
+  while (unifiedColIdx < groupingSize) {
+    unifiedOutNames.emplace_back(subParser_->makeNodeName(planNodeId_, unifiedColIdx));
+    
+    // The plan node id of grouping columns is not changed after Aggregation.
+    // So it is less than the current plan node id by two.
+    unifyExprs.emplace_back(std::make_shared<const core::FieldAccessTypedExpr>(
+        unifyNodeInputType->childAt(unifiedColIdx),
+        subParser_->makeNodeName(planNodeId_ - 2, unifiedColIdx)));
+    unifiedColIdx += 1;
+  }
+
+  // Handle aggregation columns.
+  while (unifiedColIdx < unifiedOutSize) {
+    unifiedOutNames.emplace_back(subParser_->makeNodeName(planNodeId_, unifiedColIdx));
+    
+    // The plan node id of Aggregation columns is added by one after Aggregation.
+    // So it it less than the current plan node id by one.
+    unifyExprs.emplace_back(
+      std::make_shared<const core::FieldAccessTypedExpr>(
+      unifyNodeInputType->childAt(unifiedColIdx),
+      subParser_->makeNodeName(planNodeId_ - 1, unifiedColIdx)));
+    unifiedColIdx += 1;
+  }
+
+  return std::make_shared<core::ProjectNode>(nextPlanNodeId(), std::move(unifiedOutNames),
+                                             std::move(unifyExprs), aggNode);
+}
+
+std::shared_ptr<const core::PlanNode>
+SubstraitVeloxPlanConverter::toVeloxAggWithRowConstruct(
+    const ::substrait::AggregateRel& sAgg,
+    const std::shared_ptr<const core::PlanNode>& childNode,
+    const core::AggregationNode::Step& aggStep) {
+  // Will add a Project Node before Aggregate Node to combine columns.
+  std::vector<std::shared_ptr<const core::ITypedExpr>> constructExprs;
+  auto& groupings = sAgg.groupings();
+  int constructInputPlanNodeId = planNodeId_ - 1;
+  auto constructInputTypes = childNode->outputType();
+  
+  // Handle groupings.
+  uint32_t groupingOutIdx = 0;
   for (const auto& grouping : groupings) {
     auto groupingExprs = grouping.grouping_expressions();
     for (const auto& groupingExpr : groupingExprs) {
-      // Velox's groupings are limited to be Field, so groupingExpr is
-      // expected to be FieldReference.
+      // Velox's groupings are limited to be Field.
       auto fieldExpr = exprConverter_->toVeloxExpr(
-          groupingExpr.selection(), inputPlanNodeId);
-      veloxGroupingExprs.emplace_back(fieldExpr);
-      outIdx += 1;
+          groupingExpr.selection(), constructInputPlanNodeId, constructInputTypes);
+      constructExprs.push_back(fieldExpr);
+      groupingOutIdx += 1;
     }
   }
 
-  // Parse measures to get Aggregation phase and expressions.
-  bool phaseInited = false;
-  core::AggregationNode::Step aggStep;
-  // Project expressions are used to conduct a pre-projection before
-  // Aggregation if needed.
-  std::vector<std::shared_ptr<const core::ITypedExpr>> projectExprs;
-  std::vector<std::string> projectOutNames;
-  std::vector<std::shared_ptr<const core::CallTypedExpr>> aggExprs;
-  aggExprs.reserve(sAgg.measures().size());
-
-  // Construct Velox Aggregate expressions.
-  for (const auto& sMea : sAgg.measures()) {
-    auto aggFunction = sMea.measure();
-    // Get the params of this Aggregate function.
-    std::vector<std::shared_ptr<const core::ITypedExpr>> aggParams;
-    auto args = aggFunction.args();
-    aggParams.reserve(args.size());
-    for (auto arg : args) {
-      auto typeCase = arg.rex_type_case();
-      switch (typeCase) {
-        case ::substrait::Expression::RexTypeCase::kSelection: {
-          aggParams.emplace_back(
-              exprConverter_->toVeloxExpr(arg.selection(), inputPlanNodeId));
-          break;
-        }
-        case ::substrait::Expression::RexTypeCase::kScalarFunction: {
-          // Pre-projection is needed before Aggregate.
-          // The input of Aggregatation will be the output of the
-          // pre-projection.
-          auto sFunc = arg.scalar_function();
-          projectExprs.emplace_back(
-              exprConverter_->toVeloxExpr(sFunc, inputPlanNodeId));
-          auto colOutName = subParser_->makeNodeName(planNodeId_, outIdx);
-          projectOutNames.emplace_back(colOutName);
-          auto outType = subParser_->parseType(sFunc.output_type());
-          auto aggInputParam =
-              std::make_shared<const core::FieldAccessTypedExpr>(
-                  toVeloxType(outType->type), colOutName);
-          aggParams.emplace_back(aggInputParam);
-          break;
-        }
-        default:
-          VELOX_NYI(
-              "Substrait conversion not supported for arg type '{}'", typeCase);
+  // Handle aggregations.
+  std::vector<std::string> aggFuncNames;
+  aggFuncNames.reserve(sAgg.measures().size());
+  std::vector<TypePtr> aggOutTypes;
+  aggOutTypes.reserve(sAgg.measures().size());
+  for (const auto& smea : sAgg.measures()) {
+    auto aggFunction = smea.measure();
+    std::string funcName =
+        subParser_->findVeloxFunction(functionMap_, aggFunction.function_reference());
+    aggFuncNames.push_back(funcName);
+    aggOutTypes.push_back(
+       toVeloxType(subParser_->parseType(aggFunction.output_type())->type));
+    if (funcName == "avg") {
+      // Will use row constructor to combine the sum and count columns.
+      if (aggFunction.args().size() != 2) {
+        VELOX_FAIL("Final average should have two args.");
+      }
+      std::vector<std::shared_ptr<const core::ITypedExpr>> aggParams;
+      aggParams.reserve(aggFunction.args().size());
+      for (auto arg : aggFunction.args()) {
+        aggParams.emplace_back(exprConverter_->toVeloxExpr(arg, constructInputPlanNodeId,
+                                                            constructInputTypes));
+      }
+      auto constructExpr = std::make_shared<const core::CallTypedExpr>(
+          ROW({"sum", "count"}, {DOUBLE(), BIGINT()}), std::move(aggParams),
+          "row_constructor");
+      constructExprs.push_back(constructExpr);
+    } else {
+      if (aggFunction.args().size() != 1) {
+        VELOX_FAIL("Expect only one arg.");
+      }
+      for (auto arg : aggFunction.args()) {
+        constructExprs.push_back(exprConverter_->toVeloxExpr(
+            arg, constructInputPlanNodeId, constructInputTypes));
       }
     }
-    auto funcId = aggFunction.function_reference();
-    auto funcName = subParser_->findVeloxFunction(functionMap_, funcId);
-    auto aggOutType = subParser_->parseType(aggFunction.output_type());
-    auto aggExpr = std::make_shared<const core::CallTypedExpr>(
-        toVeloxType(aggOutType->type), std::move(aggParams), funcName);
-    aggExprs.emplace_back(aggExpr);
-
-    // Initialize the Aggregate Step.
-    if (!phaseInited) {
-      auto phase = aggFunction.phase();
-      switch (phase) {
-        case ::substrait::AGGREGATION_PHASE_INITIAL_TO_INTERMEDIATE:
-          aggStep = core::AggregationNode::Step::kPartial;
-          break;
-        case ::substrait::AGGREGATION_PHASE_INTERMEDIATE_TO_INTERMEDIATE:
-          aggStep = core::AggregationNode::Step::kIntermediate;
-          break;
-        case ::substrait::AGGREGATION_PHASE_INTERMEDIATE_TO_RESULT:
-          aggStep = core::AggregationNode::Step::kFinal;
-          break;
-        default:
-          VELOX_NYI("Substrait conversion not supported for phase '{}'", phase);
-      }
-      phaseInited = true;
-    }
-    outIdx += 1;
   }
-
-  // Construct the Aggregate Node.
+  std::vector<std::string> constructOutNames;
+  constructOutNames.reserve(constructExprs.size());
+  for (uint32_t colIdx = 0; colIdx < constructExprs.size(); colIdx++) {
+    constructOutNames.emplace_back(subParser_->makeNodeName(planNodeId_, colIdx));
+  }
+  uint32_t totalOutColNum = constructExprs.size();
+  auto constructNode =
+      std::make_shared<core::ProjectNode>(nextPlanNodeId(), std::move(constructOutNames),
+                                          std::move(constructExprs), childNode);
+  // Aggregation node.
   bool ignoreNullKeys = false;
   std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>> aggregateMasks(
-      outIdx);
-  std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>>
-      preGroupingExprs;
-  if (projectOutNames.size() == 0) {
-    // Conduct Aggregation directly.
-    std::vector<std::string> aggOutNames;
-    aggOutNames.reserve(outIdx);
-    for (int idx = 0; idx < outIdx; idx++) {
-      aggOutNames.emplace_back(subParser_->makeNodeName(planNodeId_, idx));
-    }
-    return std::make_shared<core::AggregationNode>(
-        nextPlanNodeId(),
-        aggStep,
-        veloxGroupingExprs,
-        preGroupingExprs,
-        aggOutNames,
-        aggExprs,
-        aggregateMasks,
-        ignoreNullKeys,
-        childNode);
-  } else {
-    // A Project Node is needed before Aggregation.
-    auto projectNode = std::make_shared<core::ProjectNode>(
-        nextPlanNodeId(),
-        std::move(projectOutNames),
-        std::move(projectExprs),
-        childNode);
-    std::vector<std::string> aggOutNames;
-    aggOutNames.reserve(outIdx);
-    for (int idx = 0; idx < outIdx; idx++) {
-      aggOutNames.emplace_back(subParser_->makeNodeName(planNodeId_, idx));
-    }
-    return std::make_shared<core::AggregationNode>(
-        nextPlanNodeId(),
-        aggStep,
-        veloxGroupingExprs,
-        preGroupingExprs,
-        aggOutNames,
-        aggExprs,
-        aggregateMasks,
-        ignoreNullKeys,
-        projectNode);
+      totalOutColNum - groupingOutIdx);
+  std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>> preGroupingExprs;
+  std::vector<std::string> aggOutNames;
+  aggOutNames.reserve(totalOutColNum - groupingOutIdx);
+  for (uint32_t idx = groupingOutIdx; idx < totalOutColNum; idx++) {
+    aggOutNames.emplace_back(subParser_->makeNodeName(planNodeId_, idx));
   }
+  auto constructOutType = constructNode->outputType();
+  auto aggInputNodeId = planNodeId_ - 1;
+  // Aggregate expressions.
+  std::vector<std::shared_ptr<const core::CallTypedExpr>> aggExprs;
+  aggExprs.reserve(totalOutColNum - groupingOutIdx);
+  for (uint32_t colIdx = groupingOutIdx; colIdx < totalOutColNum; colIdx++) {
+    std::vector<std::shared_ptr<const core::ITypedExpr>> aggArgs;
+    aggArgs.reserve(1);
+    // Use the colIdx to access the columns after grouping columns.
+    aggArgs.emplace_back(std::make_shared<const core::FieldAccessTypedExpr>(
+        constructOutType->childAt(colIdx),
+        subParser_->makeNodeName(aggInputNodeId, colIdx)));
+    // Use the correct index to access the types and names of aggregation columns.
+    aggExprs.push_back(std::make_shared<const core::CallTypedExpr>(
+        aggOutTypes[colIdx - groupingOutIdx], std::move(aggArgs),
+        aggFuncNames[colIdx - groupingOutIdx]));
+  }
+  // Grouping expressions.
+  std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>> groupingExprs;
+  groupingExprs.reserve(groupingOutIdx);
+  for ( uint32_t colIdx = 0; colIdx < groupingOutIdx; colIdx++) {
+      // Velox's groupings are limited to be Field.
+      groupingExprs.emplace_back(std::make_shared<const core::FieldAccessTypedExpr>(
+          constructOutType->childAt(colIdx),
+          subParser_->makeNodeName(aggInputNodeId, colIdx)));
+  }
+  auto aggNode = std::make_shared<core::AggregationNode>(
+      nextPlanNodeId(), aggStep, groupingExprs, preGroupingExprs, aggOutNames, aggExprs,
+      aggregateMasks, ignoreNullKeys, constructNode);
+  if (groupingExprs.size() == 0) {
+    return aggNode;
+  }
+  // Use Project node to unify the grouping and agg names with different id.
+  return createUnifyNode(aggNode, groupingExprs.size(), aggExprs.size());
+}
+
+std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxAgg(
+    const ::substrait::AggregateRel& sAgg,
+    const std::shared_ptr<const core::PlanNode>& childNode,
+    const core::AggregationNode::Step& aggStep) {
+  auto inputTypes = childNode->outputType();
+  std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>> veloxGroupingExprs;
+  int inputPlanNodeId = planNodeId_ - 1;
+  uint32_t groupingOutIdx = 0;
+  for (const auto& grouping : sAgg.groupings()) {
+    for (const auto& groupingExpr : grouping.grouping_expressions()) {
+      // Velox's groupings are limited to be Field.
+      auto fieldExpr = exprConverter_->toVeloxExpr(groupingExpr.selection(),
+                                                   inputPlanNodeId, inputTypes);
+      veloxGroupingExprs.push_back(fieldExpr);
+      groupingOutIdx += 1;
+    }
+  }
+  // Parse measures.
+  uint32_t aggOutIdx = groupingOutIdx;
+  std::vector<std::shared_ptr<const core::CallTypedExpr>> aggExprs;
+  aggExprs.reserve(sAgg.measures().size());
+  for (const auto& smea : sAgg.measures()) {
+    auto aggFunction = smea.measure();
+    std::string funcName =
+        subParser_->findVeloxFunction(functionMap_, aggFunction.function_reference());
+    std::vector<std::shared_ptr<const core::ITypedExpr>> aggParams;
+    aggParams.reserve(aggFunction.args().size());
+    for (const auto& arg : aggFunction.args()) {
+      aggParams.emplace_back(
+          exprConverter_->toVeloxExpr(arg, inputPlanNodeId, inputTypes));
+    }
+    auto aggVeloxType =
+        toVeloxType(subParser_->parseType(aggFunction.output_type())->type);
+    if (funcName == "avg") {
+      // Currently will used sum and count to replace partial avg.
+      auto sum_expr = std::make_shared<const core::CallTypedExpr>(
+          aggVeloxType, std::move(aggParams), "sum");
+      auto count_expr = std::make_shared<const core::CallTypedExpr>(
+          BIGINT(), std::move(aggParams), "count");
+      aggExprs.emplace_back(sum_expr);
+      aggExprs.emplace_back(count_expr);
+      aggOutIdx += 2;
+    } else {
+      auto agg_expr = std::make_shared<const core::CallTypedExpr>(
+          aggVeloxType, std::move(aggParams), funcName);
+      aggExprs.emplace_back(agg_expr);
+      aggOutIdx += 1;
+    }
+  }
+  bool ignoreNullKeys = false;
+  std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>> aggregateMasks(
+      aggOutIdx - groupingOutIdx);
+  std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>> preGroupingExprs;
+  std::vector<std::string> aggOutNames;
+  aggOutNames.reserve(aggOutIdx - groupingOutIdx);
+  for (int idx = groupingOutIdx; idx < aggOutIdx; idx++) {
+    aggOutNames.emplace_back(subParser_->makeNodeName(planNodeId_, idx));
+  }
+  auto aggNode = std::make_shared<core::AggregationNode>(
+      nextPlanNodeId(), aggStep, veloxGroupingExprs, preGroupingExprs, aggOutNames,
+      aggExprs, aggregateMasks, ignoreNullKeys, childNode);
+  if (veloxGroupingExprs.size() == 0) {
+    return aggNode;
+  }
+  // Use Project node to unify the grouping and agg names with different id.
+  return createUnifyNode(aggNode, groupingOutIdx, aggOutIdx - groupingOutIdx);
 }
 
 std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
@@ -188,7 +279,8 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
   auto prePlanNodeId = planNodeId_ - 1;
   int colIdx = 0;
   for (const auto& expr : projectExprs) {
-    expressions.emplace_back(exprConverter_->toVeloxExpr(expr, prePlanNodeId));
+    expressions.emplace_back(exprConverter_->toVeloxExpr(
+      expr, prePlanNodeId, childNode->outputType()));
     projectNames.emplace_back(subParser_->makeNodeName(planNodeId_, colIdx));
     colIdx += 1;
   }
@@ -212,6 +304,15 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
     VELOX_FAIL("Child Rel is expected in FilterRel.");
   }
   return childNode;
+}
+
+std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
+    const ::substrait::InputRel& sInput) {
+  auto sourceIdx = sInput.index();
+  if (inputNodesMap_.find(sourceIdx) == inputNodesMap_.end()) {
+    VELOX_FAIL("Could not find source index {} in input nodes map.", sourceIdx);
+  }
+  return inputNodesMap_[sourceIdx];
 }
 
 std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
@@ -297,6 +398,9 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
   }
   if (sRel.has_read()) {
     return toVeloxPlan(sRel.read(), partitionIndex_, paths_, starts_, lengths_);
+  }
+  if(sRel.has_input()) {
+    return toVeloxPlan(sRel.input());
   }
   VELOX_NYI("Substrait conversion not supported for Rel.");
 }
@@ -418,7 +522,7 @@ connector::hive::SubfieldFilters SubstraitVeloxPlanConverter::toVeloxFilter(
     int32_t colIdx;
     // TODO: Add different types' support here.
     double val;
-    for (auto& param : scalarFunction.args()) {
+    for (const auto& param : scalarFunction.args()) {
       auto typeCase = param.rex_type_case();
       switch (typeCase) {
         case ::substrait::Expression::RexTypeCase::kSelection: {
@@ -513,6 +617,33 @@ void SubstraitVeloxPlanConverter::flattenConditions(
     default:
       VELOX_NYI("GetFlatConditions not supported for type '{}'", typeCase);
   }
+}
+
+bool SubstraitVeloxPlanConverter::needsRowConstruct(
+    const ::substrait::AggregateRel& sAgg, core::AggregationNode::Step& aggStep) {
+  for (const auto& smea : sAgg.measures()) {
+    auto aggFunction = smea.measure();
+    std::string funcName =
+        subParser_->findVeloxFunction(functionMap_, aggFunction.function_reference());
+    switch (aggFunction.phase()) {
+      case ::substrait::AGGREGATION_PHASE_INITIAL_TO_INTERMEDIATE:
+        aggStep = core::AggregationNode::Step::kPartial;
+        break;
+      case ::substrait::AGGREGATION_PHASE_INTERMEDIATE_TO_INTERMEDIATE:
+        aggStep = core::AggregationNode::Step::kIntermediate;
+        break;
+      case ::substrait::AGGREGATION_PHASE_INTERMEDIATE_TO_RESULT:
+        aggStep = core::AggregationNode::Step::kFinal;
+        // Only Average is considered currently.
+        if (funcName == "avg") {
+          return true;
+        }
+        break;
+      default:
+        throw std::runtime_error("Aggregate phase is not supported.");
+    }
+  }
+  return false;
 }
 
 } // namespace facebook::velox::substrait

@@ -48,6 +48,12 @@ TypePtr toVeloxType(const std::string& typeName) {
   if (typeKind == TypeKind::BOOLEAN) {
     return BOOLEAN();
   }
+  if (typeKind == TypeKind::INTEGER) {
+    return INTEGER();
+  }
+  if (typeKind == TypeKind::BIGINT) {
+    return BIGINT();
+  }
   if (typeKind == TypeKind::DOUBLE) {
     return DOUBLE();
   }

@@ -30,6 +30,16 @@ std::shared_ptr<SubstraitParser::SubstraitType> SubstraitParser::parseType(
       nullability = sType.bool_().nullability();
       break;
     }
+    case ::substrait::Type::KindCase::kI32: {
+      typeName = "INTEGER";
+      nullability = sType.i32().nullability();
+      break;
+    }
+    case ::substrait::Type::KindCase::kI64: {
+      typeName = "BIGINT";
+      nullability = sType.i64().nullability();
+      break;
+    }
     case ::substrait::Type::KindCase::kFp64: {
       typeName = "DOUBLE";
       nullability = sType.fp64().nullability();
@@ -151,8 +161,8 @@ std::string SubstraitParser::findVeloxFunction(
 
 std::string SubstraitParser::mapToVeloxFunction(
     const std::string& subFunc) const {
-  auto it = substraitVeloxFunctionMap.find(subFunc);
-  if (it != substraitVeloxFunctionMap.end()) {
+  auto it = substraitVeloxFunctionMap_.find(subFunc);
+  if (it != substraitVeloxFunctionMap_.end()) {
     return it->second;
   }
 

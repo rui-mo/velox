@@ -83,7 +83,9 @@ class SubstraitParser {
   /// words. Key: the Substrait function key word, Value: the Velox function key
   /// word. For those functions with different names in Substrait and Velox,
   /// a mapping relation should be added here.
-  std::unordered_map<std::string, std::string> substraitVeloxFunctionMap;
+  std::unordered_map<std::string, std::string> substraitVeloxFunctionMap_ = {
+      {"add", "plus"},
+      {"subtract", "minus"}};
 };
 
 } // namespace facebook::velox::substrait
