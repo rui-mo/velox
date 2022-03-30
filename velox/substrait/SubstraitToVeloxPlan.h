@@ -43,10 +43,6 @@ class SubstraitVeloxPlanConverter {
   std::shared_ptr<const core::PlanNode> toVeloxPlan(
       const ::substrait::FilterRel& sFilter);
 
-  /// Used to create a plan node with certain pre-built plan node.
-  std::shared_ptr<const core::PlanNode> toVeloxPlan(
-      const ::substrait::InputRel& sinput);
-
   /// Used to convert Substrait ReadRel into Velox PlanNode.
   /// Index: the index of the partition this item belongs to.
   /// Starts: the start positions in byte to read from the items.
@@ -90,6 +86,7 @@ class SubstraitVeloxPlanConverter {
     return lengths_;
   }
 
+  /// Used to insert certain plan node as input.
   void insertInputNode(
       uint64_t inputIdx,
       const std::shared_ptr<const core::PlanNode>& inputNode,
@@ -97,6 +94,11 @@ class SubstraitVeloxPlanConverter {
     inputNodesMap_[inputIdx] = inputNode;
     planNodeId_ = planNodeId;
   }
+
+  /// Used to check if ReadRel specifies an input of iterator.
+  /// If yes, the index of input iterator will be returned.
+  /// If not, -1 will be returned.
+  int32_t iterAsInput(const ::substrait::ReadRel& sRel);
 
  private:
   /// The Partition index.

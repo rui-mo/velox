@@ -306,13 +306,22 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
   return childNode;
 }
 
-std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
-    const ::substrait::InputRel& sInput) {
-  auto sourceIdx = sInput.index();
-  if (inputNodesMap_.find(sourceIdx) == inputNodesMap_.end()) {
-    VELOX_FAIL("Could not find source index {} in input nodes map.", sourceIdx);
+int32_t SubstraitVeloxPlanConverter::iterAsInput(const ::substrait::ReadRel& sRead) {
+  if (sRead.has_local_files()) {
+    const auto& fileList = sRead.local_files().items();
+    if (fileList.size() == 0) {
+      VELOX_FAIL("At least one file path is expected.");
+    }
+    std::string filePath = fileList[0].uri_file();
+    std::string prefix = "iterator:";
+    std::size_t pos = filePath.find(prefix);
+    if (pos == std::string::npos) {
+      return -1;
+    }
+    std::string idxStr = filePath.substr(pos + prefix.size(), filePath.size());;
+    return std::stoi(idxStr);
   }
-  return inputNodesMap_[sourceIdx];
+  VELOX_FAIL("Local file is expected.");
 }
 
 std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
@@ -321,6 +330,17 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
     std::vector<std::string>& paths,
     std::vector<u_int64_t>& starts,
     std::vector<u_int64_t>& lengths) {
+  // Check if the ReadRel specifies an input of iterator. If yes, the pre-built input node
+  // (ArrowStream node) will be used as the data source.
+  auto iterIdx = iterAsInput(sRead);    
+  if (iterIdx >= 0) {
+    if (inputNodesMap_.find(iterIdx) == inputNodesMap_.end()) {
+      VELOX_FAIL("Could not find source index {} in input nodes map.", iterIdx);
+    }
+    return inputNodesMap_[iterIdx];
+  }
+
+  // Will create TableScan node for ReadRel.
   // Get output names and types.
   std::vector<std::string> colNameList;
   std::vector<TypePtr> veloxTypeList;
@@ -398,9 +418,6 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
   }
   if (sRel.has_read()) {
     return toVeloxPlan(sRel.read(), partitionIndex_, paths_, starts_, lengths_);
-  }
-  if(sRel.has_input()) {
-    return toVeloxPlan(sRel.input());
   }
   VELOX_NYI("Substrait conversion not supported for Rel.");
 }
