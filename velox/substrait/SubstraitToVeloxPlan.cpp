@@ -267,7 +267,7 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
   if (sProject.has_input()) {
     childNode = toVeloxPlan(sProject.input());
   } else {
-    VELOX_FAIL("Child Rel is expected in ProjectRel.");
+    VELOX_NYI("Child Rel is expected in ProjectRel.");
   }
 
   // Construct Velox Expressions.
@@ -301,7 +301,8 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
   if (sFilter.has_input()) {
     childNode = toVeloxPlan(sFilter.input());
   } else {
-    VELOX_FAIL("Child Rel is expected in FilterRel.");
+    // VELOX_FAIL("Child Rel is expected in FilterRel.");
+    std::cout << "Child Rel is expected in FilterRel." << std::endl;
   }
   return childNode;
 }
