@@ -151,6 +151,30 @@ std::string SubstraitParser::getSubFunctionName(
   return subFuncSpec.substr(0, pos);
 }
 
+void SubstraitParser::getSubFunctionTypes(
+    const std::string& subFuncSpec,
+    std::vector<std::string>& types) const {
+  // Get the position of ":" in the function name.
+  std::size_t pos = subFuncSpec.find(":");
+  // Get the parameter types.
+  std::string funcTypes;
+  if (pos == std::string::npos) {
+    funcTypes = subFuncSpec;
+  } else {
+    if (pos == subFuncSpec.size() - 1) {
+      return;
+    }
+    funcTypes = subFuncSpec.substr(pos + 1);
+  }
+  // Split the types with delimiter.
+  std::string delimiter = "_";
+  while ((pos = funcTypes.find(delimiter)) != std::string::npos) {
+    types.emplace_back(funcTypes.substr(0, pos));
+    funcTypes.erase(0, pos + delimiter.length());
+  }
+  types.emplace_back(funcTypes);
+}
+
 std::string SubstraitParser::findVeloxFunction(
     const std::unordered_map<uint64_t, std::string>& functionMap,
     uint64_t id) const {

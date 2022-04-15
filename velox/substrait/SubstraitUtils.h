@@ -69,6 +69,10 @@ class SubstraitParser {
   /// When the input is a simple name, it will be returned.
   std::string getSubFunctionName(const std::string& subFuncSpec) const;
 
+  /// This function is used get the types of the function parameters.
+  void getSubFunctionTypes(
+      const std::string& subFuncSpec, std::vector<std::string>& types) const;
+
   /// Used to find the Velox function name according to the function id
   /// from a pre-constructed function map.
   std::string findVeloxFunction(

@@ -436,17 +436,7 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
 
 std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
     const ::substrait::Plan& sPlan) {
-  // Construct the function map based on the Substrait representation.
-  for (const auto& sExtension : sPlan.extensions()) {
-    if (!sExtension.has_extension_function()) {
-      continue;
-    }
-    const auto& sFmap = sExtension.extension_function();
-    auto id = sFmap.function_anchor();
-    auto name = sFmap.name();
-    functionMap_[id] = name;
-  }
-
+  constructFuncMap(sPlan);
   // Construct the expression converter.
   exprConverter_ =
       std::make_shared<SubstraitVeloxExprConverter>(subParser_, functionMap_);
@@ -461,6 +451,19 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
     }
   }
   VELOX_FAIL("RelRoot or Rel is expected in Plan.");
+}
+
+void SubstraitVeloxPlanConverter::constructFuncMap(const ::substrait::Plan& sPlan) {
+  // Construct the function map based on the Substrait representation.
+  for (const auto& sExtension : sPlan.extensions()) {
+    if (!sExtension.has_extension_function()) {
+      continue;
+    }
+    const auto& sFmap = sExtension.extension_function();
+    auto id = sFmap.function_anchor();
+    auto name = sFmap.name();
+    functionMap_[id] = name;
+  }
 }
 
 std::string SubstraitVeloxPlanConverter::nextPlanNodeId() {
@@ -534,8 +537,7 @@ connector::hive::SubfieldFilters SubstraitVeloxPlanConverter::toVeloxFilter(
   flattenConditions(sFilter, scalarFunctions);
   // Construct the FilterInfo for the related column.
   for (const auto& scalarFunction : scalarFunctions) {
-    auto filterNameSpec = subParser_->findSubstraitFuncSpec(
-        functionMap_, scalarFunction.function_reference());
+    auto filterNameSpec = findFuncSpec(scalarFunction.function_reference());
     auto filterName = subParser_->getSubFunctionName(filterNameSpec);
     int32_t colIdx;
     // TODO: Add different types' support here.
@@ -581,8 +583,10 @@ connector::hive::SubfieldFilters SubstraitVeloxPlanConverter::toVeloxFilter(
   // Construct the Filters.
   for (int idx = 0; idx < inputNameList.size(); idx++) {
     auto filterInfo = colInfoMap[idx];
-    double leftBound;
-    double rightBound;
+    // Set the left bound to be negative infinity.
+    double leftBound = -1.0 / 0.0;
+    // Set the right bound to be positive infinity.
+    double rightBound = 1.0 / 0.0;
     bool leftUnbounded = true;
     bool rightUnbounded = true;
     bool leftExclusive = false;
@@ -635,6 +639,10 @@ void SubstraitVeloxPlanConverter::flattenConditions(
     default:
       VELOX_NYI("GetFlatConditions not supported for type '{}'", typeCase);
   }
+}
+
+std::string SubstraitVeloxPlanConverter::findFuncSpec(uint64_t id) {
+  return subParser_->findSubstraitFuncSpec(functionMap_, id);
 }
 
 bool SubstraitVeloxPlanConverter::needsRowConstruct(

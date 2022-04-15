@@ -66,6 +66,10 @@ class SubstraitVeloxPlanConverter {
   std::shared_ptr<const core::PlanNode> toVeloxPlan(
       const ::substrait::Plan& sPlan);
 
+  /// Used to construct the function map between the index
+  /// and the Substrait function name.
+  void constructFuncMap(const ::substrait::Plan& sPlan);    
+
   /// Will return the index of Partition to be scanned.
   u_int32_t getPartitionIndex() {
     return partitionIndex_;
@@ -100,6 +104,17 @@ class SubstraitVeloxPlanConverter {
   /// If not, -1 will be returned.
   int32_t iterAsInput(const ::substrait::ReadRel& sRel);
 
+  /// Multiple conditions are connected to a binary tree structure with
+  /// the relation key words, including AND, OR, and etc. Currently, only
+  /// AND is supported. This function is used to extract all the Substrait
+  /// conditions in the binary tree structure into a vector.
+  void flattenConditions(
+      const ::substrait::Expression& sFilter,
+      std::vector<::substrait::Expression_ScalarFunction>& scalarFunctions);
+  
+  /// Used to find the function specification in the constructed function map.
+  std::string findFuncSpec(uint64_t id);
+ 
  private:
   /// The Partition index.
   u_int32_t partitionIndex_;
@@ -145,14 +160,6 @@ class SubstraitVeloxPlanConverter {
       const std::vector<std::string>& inputNameList,
       const std::vector<TypePtr>& inputTypeList,
       const ::substrait::Expression& sFilter);
-
-  /// Multiple conditions are connected to a binary tree structure with
-  /// the relation key words, including AND, OR, and etc. Currently, only
-  /// AND is supported. This function is used to extract all the Substrait
-  /// conditions in the binary tree structure into a vector.
-  void flattenConditions(
-      const ::substrait::Expression& sFilter,
-      std::vector<::substrait::Expression_ScalarFunction>& scalarFunctions);
 
   /// This class is used to check if some of the input columns of Aggregation
   /// should be combined into a single column. Currently, this case occurs in

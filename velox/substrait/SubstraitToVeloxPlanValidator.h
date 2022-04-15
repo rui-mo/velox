@@ -29,6 +29,9 @@ class SubstraitToVeloxPlanValidator {
   /// Used to validate literal.
   bool validate(const ::substrait::Expression::Literal& sLit);
 
+  /// Used to validate type.
+  bool validate(const ::substrait::Type& sType);
+
   bool validate(const ::substrait::Expression::FieldReference& sField);
 
   bool validate(const ::substrait::Expression::ScalarFunction& sFunc);
@@ -51,7 +54,17 @@ class SubstraitToVeloxPlanValidator {
   /// Used to validate whether the computing of this Rel is supported.
   bool validate(const ::substrait::Rel& sRel);
 
+  /// Used to validate RelRoot.
+  bool validate(const ::substrait::RelRoot& sRoot);
+
+  /// Used to validate whether the computing of this Plan is supported.
+  bool validate(const ::substrait::Plan& sPlan);
+
  private:
+  std::shared_ptr<SubstraitVeloxPlanConverter> planConverter_ =
+      std::make_shared<SubstraitVeloxPlanConverter>();
+  std::shared_ptr<SubstraitParser> subParser_ =
+      std::make_shared<SubstraitParser>();
 };
 
 } // namespace facebook::velox::substrait
