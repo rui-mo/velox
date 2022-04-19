@@ -13,7 +13,7 @@
 # limitations under the License.
 if(${VELOX_BUILD_TESTING})
   add_subdirectory(tests)
-  add_subdirectory(benchmarks)
+  # add_subdirectory(benchmarks)
 endif()
 
 add_library(
