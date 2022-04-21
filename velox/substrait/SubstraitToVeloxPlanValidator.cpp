@@ -15,6 +15,7 @@
  */
 
 #include "velox/substrait/SubstraitToVeloxPlanValidator.h"
+#include "TypeUtils.h"
 
 namespace facebook::velox::substrait {
 
@@ -71,8 +72,53 @@ bool SubstraitToVeloxPlanValidator::validate(
 
 bool SubstraitToVeloxPlanValidator::validate(
     const ::substrait::ProjectRel& sProject) {
+  // Get the input types from extension.
+  if (!sProject.has_advanced_extension()) {
+    return false;
+  }
+  auto extension = sProject.advanced_extension();
+  if (!extension.has_enhancement()) {
+    return false;
+  }
+  auto enhancement = extension.enhancement();
+  ::substrait::Type inputType;
+  if (!enhancement.UnpackTo(&inputType)) {
+    return false;
+  }
+  if (!inputType.has_struct_()) {
+    return false;
+  }
+  auto sTypes = inputType.struct_().types();
+  std::vector<TypePtr> types;
+  for (const auto& sType : sTypes) {
+    try {
+      types.emplace_back(toVeloxType(subParser_->parseType(sType)->type));
+    } catch (const VeloxException& err) {
+      std::cout << "Type is not supported in ProjectRel." << std::endl;
+      return false;
+    }
+  }
+  int32_t inputPlanNodeId = 0;
+  std::vector<std::string> names;
+  names.reserve(types.size());
+  for (uint32_t colIdx = 0; colIdx < types.size(); colIdx++) {
+    names.emplace_back(subParser_->makeNodeName(inputPlanNodeId, colIdx));
+  }
+  auto rowType = std::make_shared<RowType>(std::move(names), std::move(types));
   auto projectExprs = sProject.expressions();
-  return false;
+  std::vector<std::shared_ptr<const core::ITypedExpr>> expressions;
+  expressions.reserve(projectExprs.size());
+  try {
+    for (const auto& expr : projectExprs) {
+      expressions.emplace_back(
+          exprConverter_->toVeloxExpr(expr, inputPlanNodeId, rowType));
+    }
+    exec::ExprSet exprSet(std::move(expressions), &execCtx_);
+  } catch (const VeloxException& err) {
+    std::cout << "Validation failed for expression in ProjectRel." << std::endl;
+    return false;
+  }
+  return true;
 }
 
 bool SubstraitToVeloxPlanValidator::validate(
@@ -221,6 +267,8 @@ bool SubstraitToVeloxPlanValidator::validate(
 
 bool SubstraitToVeloxPlanValidator::validate(const ::substrait::Plan& sPlan) {
   planConverter_->constructFuncMap(sPlan);
+  exprConverter_ = std::make_shared<SubstraitVeloxExprConverter>(
+      planConverter_->getFunctionMap());
   for (const auto& sRel : sPlan.relations()) {
     if (sRel.has_root()) {
       return validate(sRel.root());

@@ -24,7 +24,6 @@ namespace facebook::velox::substrait {
 /// a Substrait plan is supported in Velox.
 class SubstraitToVeloxPlanValidator {
  public:
-  SubstraitToVeloxPlanValidator() {}
 
   /// Used to validate literal.
   bool validate(const ::substrait::Expression::Literal& sLit);
@@ -61,10 +60,22 @@ class SubstraitToVeloxPlanValidator {
   bool validate(const ::substrait::Plan& sPlan);
 
  private:
+  std::shared_ptr<core::QueryCtx> queryCtx_{core::QueryCtx::createForTest()};
+  
+  std::unique_ptr<memory::MemoryPool> pool_{
+      memory::getDefaultScopedMemoryPool()};
+  
+  core::ExecCtx execCtx_{pool_.get(), queryCtx_.get()};
+
   std::shared_ptr<SubstraitVeloxPlanConverter> planConverter_ =
       std::make_shared<SubstraitVeloxPlanConverter>();
+
   std::shared_ptr<SubstraitParser> subParser_ =
       std::make_shared<SubstraitParser>();
+
+  /// The Expression converter used to convert Substrait representations into
+  /// Velox expressions.
+  std::shared_ptr<SubstraitVeloxExprConverter> exprConverter_;
 };
 
 } // namespace facebook::velox::substrait

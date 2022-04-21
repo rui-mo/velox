@@ -439,7 +439,7 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
   constructFuncMap(sPlan);
   // Construct the expression converter.
   exprConverter_ =
-      std::make_shared<SubstraitVeloxExprConverter>(subParser_, functionMap_);
+      std::make_shared<SubstraitVeloxExprConverter>(functionMap_);
 
   // In fact, only one RelRoot or Rel is expected here.
   for (const auto& sRel : sPlan.relations()) {
