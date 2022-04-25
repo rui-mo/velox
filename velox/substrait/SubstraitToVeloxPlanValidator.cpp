@@ -17,6 +17,8 @@
 #include "velox/substrait/SubstraitToVeloxPlanValidator.h"
 #include "TypeUtils.h"
 
+#include "velox/functions/prestosql/registration/RegistrationFunctions.h"
+
 namespace facebook::velox::substrait {
 
 bool SubstraitToVeloxPlanValidator::validate(
@@ -70,13 +72,9 @@ bool SubstraitToVeloxPlanValidator::validate(
   }
 }
 
-bool SubstraitToVeloxPlanValidator::validate(
-    const ::substrait::ProjectRel& sProject) {
-  // Get the input types from extension.
-  if (!sProject.has_advanced_extension()) {
-    return false;
-  }
-  auto extension = sProject.advanced_extension();
+bool SubstraitToVeloxPlanValidator::validateInputTypes(
+    const ::substrait::extensions::AdvancedExtension& extension,
+    std::vector<TypePtr>& types) {
   if (!extension.has_enhancement()) {
     return false;
   }
@@ -89,7 +87,6 @@ bool SubstraitToVeloxPlanValidator::validate(
     return false;
   }
   auto sTypes = inputType.struct_().types();
-  std::vector<TypePtr> types;
   for (const auto& sType : sTypes) {
     try {
       types.emplace_back(toVeloxType(subParser_->parseType(sType)->type));
@@ -98,6 +95,27 @@ bool SubstraitToVeloxPlanValidator::validate(
       return false;
     }
   }
+  return true;
+}
+
+bool SubstraitToVeloxPlanValidator::validate(
+    const ::substrait::ProjectRel& sProject) {
+  if (sProject.has_input() && !validate(sProject.input())) {
+    return false;
+  }
+
+  // Get and validate the input types from extension.
+  if (!sProject.has_advanced_extension()) {
+    std::cout << "Input types are expected in ProjectRel." << std::endl;
+    return false;
+  }
+  auto extension = sProject.advanced_extension();
+  std::vector<TypePtr> types;
+  if (!validateInputTypes(extension, types)) {
+    std::cout << "Validation failed for input types in ProjectRel" << std::endl;
+    return false;
+  }
+
   int32_t inputPlanNodeId = 0;
   std::vector<std::string> names;
   names.reserve(types.size());
@@ -133,7 +151,72 @@ bool SubstraitToVeloxPlanValidator::validate(
 
 bool SubstraitToVeloxPlanValidator::validate(
     const ::substrait::AggregateRel& sAgg) {
-  return false;
+  if (sAgg.has_input() && !validate(sAgg.input())) {
+    return false;
+  }
+
+  // Validate input types.
+  if (sAgg.has_advanced_extension()) {
+    auto extension = sAgg.advanced_extension();
+    std::vector<TypePtr> types;
+    if (!validateInputTypes(extension, types)) {
+      std::cout << "Validation failed for input types in AggregateRel"
+                << std::endl;
+      return false;
+    }
+  }
+
+  // Validate groupings.
+  for (const auto& grouping : sAgg.groupings()) {
+    for (const auto& groupingExpr : grouping.grouping_expressions()) {
+      auto typeCase = groupingExpr.rex_type_case();
+      switch (typeCase) {
+        case ::substrait::Expression::RexTypeCase::kSelection:
+          break;
+        default:
+          std::cout << "Only field is supported in groupings." << std::endl;
+          return false;
+      }
+    }
+  }
+
+  // Validate aggregate functions.
+  std::vector<std::string> funcSpecs;
+  funcSpecs.reserve(sAgg.measures().size());
+  for (const auto& smea : sAgg.measures()) {
+    try {
+      auto aggFunction = smea.measure();
+      funcSpecs.emplace_back(
+          planConverter_->findFuncSpec(aggFunction.function_reference()));
+      toVeloxType(subParser_->parseType(aggFunction.output_type())->type);
+      for (auto arg : aggFunction.args()) {
+        auto typeCase = arg.rex_type_case();
+        switch (typeCase) {
+          case ::substrait::Expression::RexTypeCase::kSelection:
+            break;
+          default:
+            std::cout << "Only field is supported in aggregate functions."
+                      << std::endl;
+            return false;
+        }
+      }
+    } catch (const VeloxException& err) {
+      std::cout << "Validation failed for aggregate function due to: "
+                << err.message() << std::endl;
+      return false;
+    }
+  }
+
+  std::unordered_set<std::string> supportedFuncs = {"sum", "count", "avg"};
+  for (const auto& funcSpec : funcSpecs) {
+    auto funcName = subParser_->getSubFunctionName(funcSpec);
+    if (supportedFuncs.find(funcName) == supportedFuncs.end()) {
+      std::cout << "Validation failed due to " << funcName
+                << " was not supported in AggregateRel." << std::endl;
+      return false;
+    }
+  }
+  return true;
 }
 
 bool SubstraitToVeloxPlanValidator::validate(
@@ -266,6 +349,7 @@ bool SubstraitToVeloxPlanValidator::validate(
 }
 
 bool SubstraitToVeloxPlanValidator::validate(const ::substrait::Plan& sPlan) {
+  functions::prestosql::registerAllScalarFunctions();
   planConverter_->constructFuncMap(sPlan);
   exprConverter_ = std::make_shared<SubstraitVeloxExprConverter>(
       planConverter_->getFunctionMap());
