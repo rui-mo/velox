@@ -42,7 +42,7 @@ RowVectorPtr ArrowStream::getOutput() {
   arrowStream_->get_schema(&(*arrowStream_), &arrowSchema);
   // Convert Arrow data into RowVector.
   rowVector_ = std::dynamic_pointer_cast<RowVector>(
-      facebook::velox::importFromArrowAsOwner(arrowSchema, arrowArray));
+      facebook::velox::importFromArrowAsViewer(arrowSchema, arrowArray));
   return rowVector_;
 }
 
