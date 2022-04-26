@@ -58,7 +58,7 @@ class SubstraitVeloxExprConverter {
   /// The Substrait parser used to convert Substrait representations into
   /// recognizable representations.
   std::shared_ptr<SubstraitParser> subParser_ =
-        std::make_shared<SubstraitParser>();
+      std::make_shared<SubstraitParser>();
 
   /// The map storing the relations between the function id and the function
   /// name.

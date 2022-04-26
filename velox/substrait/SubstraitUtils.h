@@ -54,6 +54,9 @@ class SubstraitParser {
   /// Used to make node name in the format of n{nodeId}_{colIdx}.
   std::string makeNodeName(int nodeId, int colIdx);
 
+  /// Used to get the column index from node name.
+  int getIdxFromNodeName(const std::string& nodeName);
+
   /// Used to find the Substrait function name according to the function id
   /// from a pre-constructed function map. The function specification can be
   /// a simple name or a compound name. The compound name format is:
@@ -71,7 +74,8 @@ class SubstraitParser {
 
   /// This function is used get the types of the function parameters.
   void getSubFunctionTypes(
-      const std::string& subFuncSpec, std::vector<std::string>& types) const;
+      const std::string& subFuncSpec,
+      std::vector<std::string>& types) const;
 
   /// Used to find the Velox function name according to the function id
   /// from a pre-constructed function map.

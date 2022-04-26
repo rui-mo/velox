@@ -72,8 +72,8 @@ class SubstraitVeloxPlanConverter {
 
   /// Will return the function map used by this plan converter.
   const std::unordered_map<uint64_t, std::string>& getFunctionMap() {
-    return functionMap_;  
-  }   
+    return functionMap_;
+  }
 
   /// Will return the index of Partition to be scanned.
   u_int32_t getPartitionIndex() {
@@ -116,10 +116,10 @@ class SubstraitVeloxPlanConverter {
   void flattenConditions(
       const ::substrait::Expression& sFilter,
       std::vector<::substrait::Expression_ScalarFunction>& scalarFunctions);
-  
+
   /// Used to find the function specification in the constructed function map.
   std::string findFuncSpec(uint64_t id);
- 
+
  private:
   /// The Partition index.
   u_int32_t partitionIndex_;

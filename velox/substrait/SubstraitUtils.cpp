@@ -130,6 +130,24 @@ std::string SubstraitParser::makeNodeName(int node_id, int col_idx) {
   return fmt::format("n{}_{}", node_id, col_idx);
 }
 
+int SubstraitParser::getIdxFromNodeName(const std::string& nodeName) {
+  // Get the position of "_" in the function name.
+  std::size_t pos = nodeName.find("_");
+  if (pos == std::string::npos) {
+    VELOX_FAIL("Invalid node name.");
+  }
+  if (pos == nodeName.size() - 1) {
+    VELOX_FAIL("Invalid node name.");
+  }
+  // Get the column index.
+  std::string colIdx = nodeName.substr(pos + 1);
+  try {
+    return stoi(colIdx);
+  } catch (const std::exception& e) {
+    VELOX_FAIL(e.what());
+  }
+}
+
 std::string SubstraitParser::findSubstraitFuncSpec(
     const std::unordered_map<uint64_t, std::string>& functionMap,
     uint64_t id) const {
