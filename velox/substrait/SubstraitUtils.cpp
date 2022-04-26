@@ -143,8 +143,8 @@ int SubstraitParser::getIdxFromNodeName(const std::string& nodeName) {
   std::string colIdx = nodeName.substr(pos + 1);
   try {
     return stoi(colIdx);
-  } catch (const std::exception& e) {
-    VELOX_FAIL(e.what());
+  } catch (const std::exception& err) {
+    VELOX_FAIL(err.what());
   }
 }
 

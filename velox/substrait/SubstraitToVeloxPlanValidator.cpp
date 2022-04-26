@@ -21,19 +21,6 @@
 
 namespace facebook::velox::substrait {
 
-bool SubstraitToVeloxPlanValidator::validate(
-    const ::substrait::Expression::Literal& sLit) {
-  auto typeCase = sLit.literal_type_case();
-  switch (typeCase) {
-    case ::substrait::Expression_Literal::LiteralTypeCase::kI32:
-    case ::substrait::Expression_Literal::LiteralTypeCase::kFp64:
-    case ::substrait::Expression_Literal::LiteralTypeCase::kBoolean:
-      return true;
-    default:
-      return false;
-  }
-}
-
 bool SubstraitToVeloxPlanValidator::validate(const ::substrait::Type& sType) {
   switch (sType.kind_case()) {
     case ::substrait::Type::KindCase::kBool:
@@ -42,31 +29,6 @@ bool SubstraitToVeloxPlanValidator::validate(const ::substrait::Type& sType) {
     case ::substrait::Type::KindCase::kFp64:
     case ::substrait::Type::KindCase::kString:
       return true;
-    default:
-      return false;
-  }
-}
-
-bool SubstraitToVeloxPlanValidator::validate(
-    const ::substrait::Expression::FieldReference& sField) {
-  return false;
-}
-
-bool SubstraitToVeloxPlanValidator::validate(
-    const ::substrait::Expression::ScalarFunction& sFunc) {
-  return false;
-}
-
-bool SubstraitToVeloxPlanValidator::validate(
-    const ::substrait::Expression& sExpr) {
-  auto typeCase = sExpr.rex_type_case();
-  switch (typeCase) {
-    case ::substrait::Expression::RexTypeCase::kLiteral:
-      return validate(sExpr.literal());
-    case ::substrait::Expression::RexTypeCase::kScalarFunction:
-      return validate(sExpr.scalar_function());
-    case ::substrait::Expression::RexTypeCase::kSelection:
-      return validate(sExpr.selection());
     default:
       return false;
   }
@@ -91,7 +53,8 @@ bool SubstraitToVeloxPlanValidator::validateInputTypes(
     try {
       types.emplace_back(toVeloxType(subParser_->parseType(sType)->type));
     } catch (const VeloxException& err) {
-      std::cout << "Type is not supported in ProjectRel." << std::endl;
+      std::cout << "Type is not supported in ProjectRel due to:"
+                << err.message() << std::endl;
       return false;
     }
   }
@@ -133,7 +96,8 @@ bool SubstraitToVeloxPlanValidator::validate(
     }
     exec::ExprSet exprSet(std::move(expressions), &execCtx_);
   } catch (const VeloxException& err) {
-    std::cout << "Validation failed for expression in ProjectRel." << std::endl;
+    std::cout << "Validation failed for expression in ProjectRel due to:"
+              << err.message() << std::endl;
     return false;
   }
   return true;
@@ -141,11 +105,6 @@ bool SubstraitToVeloxPlanValidator::validate(
 
 bool SubstraitToVeloxPlanValidator::validate(
     const ::substrait::FilterRel& sFilter) {
-  //   if (sFilter.has_input()) {
-  //     if (!validate(sFilter.input())) {
-  //       return false;
-  //     }
-  //   }
   return false;
 }
 
@@ -240,8 +199,8 @@ bool SubstraitToVeloxPlanValidator::validate(
       planConverter_->flattenConditions(sRead.filter(), scalarFunctions);
     } catch (const VeloxException& err) {
       std::cout
-          << "Validation failed due to flattening conditions failed in ReadRel."
-          << std::endl;
+          << "Validation failed due to flattening conditions failed in ReadRel due to:"
+          << err.message() << std::endl;
       return false;
     }
   }
@@ -253,7 +212,7 @@ bool SubstraitToVeloxPlanValidator::validate(
       funcSpecs.emplace_back(
           planConverter_->findFuncSpec(scalarFunction.function_reference()));
     } catch (const VeloxException& err) {
-      std::cout << "Validation failed due to function was not found in ReadRel."
+      std::cout << "Validation failed in ReadRel due to:" << err.message()
                 << std::endl;
       return false;
     }

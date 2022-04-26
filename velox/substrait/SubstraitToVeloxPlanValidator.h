@@ -24,18 +24,8 @@ namespace facebook::velox::substrait {
 /// a Substrait plan is supported in Velox.
 class SubstraitToVeloxPlanValidator {
  public:
-  /// Used to validate literal.
-  bool validate(const ::substrait::Expression::Literal& sLit);
-
   /// Used to validate type.
   bool validate(const ::substrait::Type& sType);
-
-  bool validate(const ::substrait::Expression::FieldReference& sField);
-
-  bool validate(const ::substrait::Expression::ScalarFunction& sFunc);
-
-  /// Used to validate expressions.
-  bool validate(const ::substrait::Expression& sExpr);
 
   /// Used to validate Aggregation.
   bool validate(const ::substrait::AggregateRel& sAgg);
@@ -59,24 +49,28 @@ class SubstraitToVeloxPlanValidator {
   bool validate(const ::substrait::Plan& sPlan);
 
  private:
+  /// A query context used for function validation.
   std::shared_ptr<core::QueryCtx> queryCtx_{core::QueryCtx::createForTest()};
 
   std::unique_ptr<memory::MemoryPool> pool_{
       memory::getDefaultScopedMemoryPool()};
 
+  /// A execution context used for function validation.
   core::ExecCtx execCtx_{pool_.get(), queryCtx_.get()};
 
+  /// A converter used to convert Substrait plan into Velox's plan node.
   std::shared_ptr<SubstraitVeloxPlanConverter> planConverter_ =
       std::make_shared<SubstraitVeloxPlanConverter>();
 
+  /// A parser used to convert Substrait plan into recognizable representations.
   std::shared_ptr<SubstraitParser> subParser_ =
       std::make_shared<SubstraitParser>();
 
-  /// The Expression converter used to convert Substrait representations into
+  /// A Expression converter used to convert Substrait representations into
   /// Velox expressions.
   std::shared_ptr<SubstraitVeloxExprConverter> exprConverter_;
 
-  /// Used to get types from advanced extension.
+  /// Used to get types from advanced extension and validate them.
   bool validateInputTypes(
       const ::substrait::extensions::AdvancedExtension& extension,
       std::vector<TypePtr>& types);

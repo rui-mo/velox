@@ -59,7 +59,7 @@ SubstraitVeloxPlanConverter::createUnifyNode(
 
     // The input column index should also be aligned.
     int colIdx = subParser_->getIdxFromNodeName(
-      unifyNodeInputType->nameOf(unifiedColIdx));
+        unifyNodeInputType->nameOf(unifiedColIdx));
     // The plan node id of grouping columns is not changed after Aggregation.
     // So it is less than the current plan node id by two.
     unifyExprs.emplace_back(std::make_shared<const core::FieldAccessTypedExpr>(
@@ -75,7 +75,7 @@ SubstraitVeloxPlanConverter::createUnifyNode(
 
     // The input column index should also be aligned.
     int colIdx = subParser_->getIdxFromNodeName(
-      unifyNodeInputType->nameOf(unifiedColIdx));
+        unifyNodeInputType->nameOf(unifiedColIdx));
     // The plan node id of Aggregation columns is added by one after
     // Aggregation. So it it less than the current plan node id by one.
     unifyExprs.emplace_back(std::make_shared<const core::FieldAccessTypedExpr>(
@@ -361,8 +361,11 @@ int32_t SubstraitVeloxPlanConverter::iterAsInput(
       return -1;
     }
     std::string idxStr = filePath.substr(pos + prefix.size(), filePath.size());
-    ;
-    return std::stoi(idxStr);
+    try {
+      return stoi(idxStr);
+    } catch (const std::exception& err) {
+      VELOX_FAIL(err.what());
+    }
   }
   VELOX_FAIL("Local file is expected.");
 }
