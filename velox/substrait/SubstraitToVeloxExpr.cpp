@@ -22,8 +22,7 @@ namespace facebook::velox::substrait {
 std::shared_ptr<const core::FieldAccessTypedExpr>
 SubstraitVeloxExprConverter::toVeloxExpr(
     const ::substrait::Expression::FieldReference& sField,
-    int32_t inputPlanNodeId,
-    const RowTypePtr& inputType) {
+    int32_t inputPlanNodeId, const RowTypePtr& inputType) {
   auto typeCase = sField.reference_type_case();
   switch (typeCase) {
     case ::substrait::Expression::FieldReference::ReferenceTypeCase::
@@ -51,13 +50,13 @@ SubstraitVeloxExprConverter::toVeloxExpr(
   for (const auto& sArg : sFunc.args()) {
     params.emplace_back(toVeloxExpr(sArg, inputPlanNodeId, inputType));
   }
-  auto veloxFunction =
-      subParser_->findVeloxFunction(functionMap_, sFunc.function_reference());
-  auto veloxType =
-      toVeloxType(subParser_->parseType(sFunc.output_type())->type);
+  auto veloxFunction = subParser_->findVeloxFunction(
+    functionMap_, sFunc.function_reference());
+  auto veloxType = toVeloxType(
+      subParser_->parseType(sFunc.output_type())->type);
   if (veloxFunction == "cast") {
     return std::make_shared<const core::CastTypedExpr>(
-        veloxType, std::move(params), true);
+      veloxType, std::move(params), true);
   }
   if (veloxFunction == "alias") {
     if (params.size() != 1) {
@@ -89,8 +88,7 @@ SubstraitVeloxExprConverter::toVeloxExpr(
 std::shared_ptr<const core::ITypedExpr>
 SubstraitVeloxExprConverter::toVeloxExpr(
     const ::substrait::Expression& sExpr,
-    int32_t inputPlanNodeId,
-    const RowTypePtr& inputType) {
+    int32_t inputPlanNodeId, const RowTypePtr& inputType) {
   std::shared_ptr<const core::ITypedExpr> veloxExpr;
   auto typeCase = sExpr.rex_type_case();
   switch (typeCase) {

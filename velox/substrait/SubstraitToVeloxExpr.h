@@ -29,8 +29,9 @@ class SubstraitVeloxExprConverter {
   /// into recognizable representations. functionMap: A pre-constructed map
   /// storing the relations between the function id and the function name.
   SubstraitVeloxExprConverter(
+      const std::shared_ptr<SubstraitParser>& subParser,
       const std::unordered_map<uint64_t, std::string>& functionMap)
-      : functionMap_(functionMap) {}
+      : subParser_(subParser), functionMap_(functionMap) {}
 
   /// Used to convert Substrait Field into Velox Field Expression.
   std::shared_ptr<const core::FieldAccessTypedExpr> toVeloxExpr(
@@ -57,8 +58,7 @@ class SubstraitVeloxExprConverter {
  private:
   /// The Substrait parser used to convert Substrait representations into
   /// recognizable representations.
-  std::shared_ptr<SubstraitParser> subParser_ =
-      std::make_shared<SubstraitParser>();
+  std::shared_ptr<SubstraitParser> subParser_;
 
   /// The map storing the relations between the function id and the function
   /// name.
