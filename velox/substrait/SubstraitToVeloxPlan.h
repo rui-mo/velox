@@ -24,6 +24,10 @@ namespace facebook::velox::substrait {
 /// This class is used to convert the Substrait plan into Velox plan.
 class SubstraitVeloxPlanConverter {
  public:
+  /// Used to convert Substrait JoinRel into Velox PlanNode.
+  std::shared_ptr<const core::PlanNode> toVeloxPlan(
+      const ::substrait::JoinRel& sJoin);
+
   /// Used to convert Substrait AggregateRel into Velox PlanNode.
   std::shared_ptr<const core::PlanNode> toVeloxPlan(
       const ::substrait::AggregateRel& sAgg);
@@ -187,6 +191,13 @@ class SubstraitVeloxPlanConverter {
       const ::substrait::AggregateRel& sAgg,
       const std::shared_ptr<const core::PlanNode>& childNode,
       const core::AggregationNode::Step& aggStep);
+
+  void extractJoinKeys(
+      const ::substrait::Expression& joinExpression,
+      const std::vector<PlanNodeInfo>& inputPlanNodeInfos,
+      std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>>& leftKeys,
+      std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>>&
+          rightKeys);
 };
 
 } // namespace facebook::velox::substrait

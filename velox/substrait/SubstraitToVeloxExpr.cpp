@@ -22,18 +22,24 @@ namespace facebook::velox::substrait {
 std::shared_ptr<const core::FieldAccessTypedExpr>
 SubstraitVeloxExprConverter::toVeloxExpr(
     const ::substrait::Expression::FieldReference& sField,
-    int32_t inputPlanNodeId,
-    const RowTypePtr& inputType) {
+    const std::vector<PlanNodeInfo>& inputPlanNodeInfos) {
   auto typeCase = sField.reference_type_case();
   switch (typeCase) {
     case ::substrait::Expression::FieldReference::ReferenceTypeCase::
         kDirectReference: {
       auto dRef = sField.direct_reference();
       int32_t colIdx = subParser_->parseReferenceSegment(dRef);
-      auto fieldName = subParser_->makeNodeName(inputPlanNodeId, colIdx);
-      auto inType = inputType->childAt(colIdx);
-      return std::make_shared<const core::FieldAccessTypedExpr>(
-          inType, fieldName);
+      for (int i = 0; i < inputPlanNodeInfos.size(); ++i) {
+        if (colIdx >= inputPlanNodeInfos[i].rowType->size()) {
+          colIdx -= inputPlanNodeInfos[i].rowType->size();
+        } else {
+          auto fieldName =
+              subParser_->makeNodeName(inputPlanNodeInfos[i].id, colIdx);
+          auto inType = inputPlanNodeInfos[i].rowType->childAt(colIdx);
+          return std::make_shared<const core::FieldAccessTypedExpr>(
+              inType, fieldName);
+        }
+      }
     }
     default:
       VELOX_NYI(
@@ -44,12 +50,11 @@ SubstraitVeloxExprConverter::toVeloxExpr(
 std::shared_ptr<const core::ITypedExpr>
 SubstraitVeloxExprConverter::toVeloxExpr(
     const ::substrait::Expression::ScalarFunction& sFunc,
-    int32_t inputPlanNodeId,
-    const RowTypePtr& inputType) {
+    const std::vector<PlanNodeInfo>& inputPlanNodeInfos) {
   std::vector<std::shared_ptr<const core::ITypedExpr>> params;
   params.reserve(sFunc.args().size());
   for (const auto& sArg : sFunc.args()) {
-    params.emplace_back(toVeloxExpr(sArg, inputPlanNodeId, inputType));
+    params.emplace_back(toVeloxExpr(sArg, inputPlanNodeInfos));
   }
   auto veloxFunction =
       subParser_->findVeloxFunction(functionMap_, sFunc.function_reference());
@@ -89,17 +94,16 @@ SubstraitVeloxExprConverter::toVeloxExpr(
 std::shared_ptr<const core::ITypedExpr>
 SubstraitVeloxExprConverter::toVeloxExpr(
     const ::substrait::Expression& sExpr,
-    int32_t inputPlanNodeId,
-    const RowTypePtr& inputType) {
+    const std::vector<PlanNodeInfo>& inputPlanNodes) {
   std::shared_ptr<const core::ITypedExpr> veloxExpr;
   auto typeCase = sExpr.rex_type_case();
   switch (typeCase) {
     case ::substrait::Expression::RexTypeCase::kLiteral:
       return toVeloxExpr(sExpr.literal());
     case ::substrait::Expression::RexTypeCase::kScalarFunction:
-      return toVeloxExpr(sExpr.scalar_function(), inputPlanNodeId, inputType);
+      return toVeloxExpr(sExpr.scalar_function(), inputPlanNodes);
     case ::substrait::Expression::RexTypeCase::kSelection:
-      return toVeloxExpr(sExpr.selection(), inputPlanNodeId, inputType);
+      return toVeloxExpr(sExpr.selection(), inputPlanNodes);
     default:
       VELOX_NYI(
           "Substrait conversion not supported for Expression '{}'", typeCase);

@@ -92,7 +92,7 @@ bool SubstraitToVeloxPlanValidator::validate(
   try {
     for (const auto& expr : projectExprs) {
       expressions.emplace_back(
-          exprConverter_->toVeloxExpr(expr, inputPlanNodeId, rowType));
+          exprConverter_->toVeloxExpr(expr, {{inputPlanNodeId, rowType}}));
     }
     exec::ExprSet exprSet(std::move(expressions), &execCtx_);
   } catch (const VeloxException& err) {
