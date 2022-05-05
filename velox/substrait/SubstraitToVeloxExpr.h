@@ -21,6 +21,11 @@
 
 namespace facebook::velox::substrait {
 
+struct PlanNodeInfo {
+  int32_t id;
+  const RowTypePtr& rowType;
+};
+
 /// This class is used to convert Substrait representations to Velox
 /// expressions.
 class SubstraitVeloxExprConverter {
@@ -28,21 +33,19 @@ class SubstraitVeloxExprConverter {
   /// subParser: A Substrait parser used to convert Substrait representations
   /// into recognizable representations. functionMap: A pre-constructed map
   /// storing the relations between the function id and the function name.
-  SubstraitVeloxExprConverter(
+  explicit SubstraitVeloxExprConverter(
       const std::unordered_map<uint64_t, std::string>& functionMap)
       : functionMap_(functionMap) {}
 
   /// Used to convert Substrait Field into Velox Field Expression.
   std::shared_ptr<const core::FieldAccessTypedExpr> toVeloxExpr(
       const ::substrait::Expression::FieldReference& sField,
-      int32_t inputPlanNodeId,
-      const RowTypePtr& inputType);
+      const std::vector<PlanNodeInfo>& inputPlanNodeInfos);
 
   /// Used to convert Substrait ScalarFunction into Velox Expression.
   std::shared_ptr<const core::ITypedExpr> toVeloxExpr(
       const ::substrait::Expression::ScalarFunction& sFunc,
-      int32_t inputPlanNodeId,
-      const RowTypePtr& inputType);
+      const std::vector<PlanNodeInfo>& inputPlanNodeInfos);
 
   /// Used to convert Substrait Literal into Velox Expression.
   std::shared_ptr<const core::ConstantTypedExpr> toVeloxExpr(
@@ -51,8 +54,7 @@ class SubstraitVeloxExprConverter {
   /// Used to convert Substrait Expression into Velox Expression.
   std::shared_ptr<const core::ITypedExpr> toVeloxExpr(
       const ::substrait::Expression& sExpr,
-      int32_t inputPlanNodeId,
-      const RowTypePtr& inputType);
+      const std::vector<PlanNodeInfo>& inputPlanNodes);
 
  private:
   /// The Substrait parser used to convert Substrait representations into
