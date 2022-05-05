@@ -109,6 +109,51 @@ bool SubstraitToVeloxPlanValidator::validate(
 }
 
 bool SubstraitToVeloxPlanValidator::validate(
+    const ::substrait::JoinRel& sJoin) {
+  if (sJoin.has_left() && !validate(sJoin.left())) {
+    return false;
+  }
+  if (sJoin.has_right() && !validate(sJoin.right())) {
+    return false;
+  }
+
+  switch (sJoin.type()) {
+    case ::substrait::JoinRel_JoinType_JOIN_TYPE_INNER:
+    case ::substrait::JoinRel_JoinType_JOIN_TYPE_OUTER:
+    case ::substrait::JoinRel_JoinType_JOIN_TYPE_LEFT:
+    case ::substrait::JoinRel_JoinType_JOIN_TYPE_RIGHT:
+    case ::substrait::JoinRel_JoinType_JOIN_TYPE_SEMI:
+    case ::substrait::JoinRel_JoinType_JOIN_TYPE_ANTI:
+      break;
+    default:
+      return false;
+  }
+
+  // Validate input types.
+  if (sJoin.has_advanced_extension()) {
+    const auto& extension = sJoin.advanced_extension();
+    std::vector<TypePtr> types;
+    if (!validateInputTypes(extension, types)) {
+      std::cout << "Validation failed for input types in JoinRel" << std::endl;
+      return false;
+    }
+  }
+
+  if (sJoin.has_expression()) {
+    std::vector<const ::substrait::Expression::FieldReference*> leftKeys,
+        rightKeys;
+    try {
+      planConverter_->extractJoinKeys(sJoin.expression(), leftKeys, rightKeys);
+    } catch (const VeloxException& err) {
+      std::cout << "Validation failed for expression in JoinRel due to:"
+                << err.message() << std::endl;
+      return false;
+    }
+  }
+  return true;
+}
+
+bool SubstraitToVeloxPlanValidator::validate(
     const ::substrait::AggregateRel& sAgg) {
   if (sAgg.has_input() && !validate(sAgg.input())) {
     return false;
@@ -291,6 +336,9 @@ bool SubstraitToVeloxPlanValidator::validate(const ::substrait::Rel& sRel) {
   }
   if (sRel.has_filter()) {
     return validate(sRel.filter());
+  }
+  if (sRel.has_join()) {
+    return validate(sRel.join());
   }
   if (sRel.has_read()) {
     return validate(sRel.read());

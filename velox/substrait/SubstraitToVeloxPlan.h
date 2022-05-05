@@ -124,6 +124,16 @@ class SubstraitVeloxPlanConverter {
   /// Used to find the function specification in the constructed function map.
   std::string findFuncSpec(uint64_t id);
 
+  /// Extract join keys from joinExpression.
+  /// joinExpression is a boolean condition that describes whether each record
+  /// from the left set “match” the record from the right set. The condition
+  /// must only include the following operations: AND, ==, field references.
+  /// Field references correspond to the direct output order of the data.
+  void extractJoinKeys(
+      const ::substrait::Expression& joinExpression,
+      std::vector<const ::substrait::Expression::FieldReference*>& leftExprs,
+      std::vector<const ::substrait::Expression::FieldReference*>& rightExprs);
+
  private:
   /// The Partition index.
   u_int32_t partitionIndex_;
@@ -191,13 +201,6 @@ class SubstraitVeloxPlanConverter {
       const ::substrait::AggregateRel& sAgg,
       const std::shared_ptr<const core::PlanNode>& childNode,
       const core::AggregationNode::Step& aggStep);
-
-  void extractJoinKeys(
-      const ::substrait::Expression& joinExpression,
-      const std::vector<PlanNodeInfo>& inputPlanNodeInfos,
-      std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>>& leftKeys,
-      std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>>&
-          rightKeys);
 };
 
 } // namespace facebook::velox::substrait

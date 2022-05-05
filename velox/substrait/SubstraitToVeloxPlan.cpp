@@ -34,9 +34,22 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
       {std::stoi(leftNode->id()), leftNode->outputType()},
       {std::stoi(rightNode->id()), rightNode->outputType()}};
   // extract join keys from join expression
+  std::vector<const ::substrait::Expression::FieldReference*> leftExprs,
+      rightExprs;
+  extractJoinKeys(sJoin.expression(), leftExprs, rightExprs);
+  VELOX_CHECK_EQ(leftExprs.size(), rightExprs.size());
+  size_t numKeys = leftExprs.size();
+
   std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>> leftKeys,
       rightKeys;
-  extractJoinKeys(sJoin.expression(), inputPlanNodeInfos, leftKeys, rightKeys);
+  leftKeys.reserve(numKeys);
+  rightKeys.reserve(numKeys);
+  for (size_t i = 0; i < numKeys; ++i) {
+    leftKeys.emplace_back(
+        exprConverter_->toVeloxExpr(*leftExprs[i], inputPlanNodeInfos));
+    rightKeys.emplace_back(
+        exprConverter_->toVeloxExpr(*rightExprs[i], inputPlanNodeInfos));
+  }
 
   auto outputSize =
       leftNode->outputType()->size() + rightNode->outputType()->size();
@@ -65,6 +78,21 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
     case ::substrait::JoinRel_JoinType::JoinRel_JoinType_JOIN_TYPE_INNER:
       joinType = core::JoinType::kInner;
       break;
+    case ::substrait::JoinRel_JoinType::JoinRel_JoinType_JOIN_TYPE_OUTER:
+      joinType = core::JoinType::kFull;
+      break;
+    case ::substrait::JoinRel_JoinType::JoinRel_JoinType_JOIN_TYPE_LEFT:
+      joinType = core::JoinType::kLeft;
+      break;
+    case ::substrait::JoinRel_JoinType::JoinRel_JoinType_JOIN_TYPE_RIGHT:
+      joinType = core::JoinType::kRight;
+      break;
+    case ::substrait::JoinRel_JoinType::JoinRel_JoinType_JOIN_TYPE_SEMI:
+      joinType = core::JoinType::kSemi;
+      break;
+    case ::substrait::JoinRel_JoinType::JoinRel_JoinType_JOIN_TYPE_ANTI:
+      joinType = core::JoinType::kAnti;
+      break;
     default:
       VELOX_NYI("Unsupported Join type: {}", sJoin.type());
   }
@@ -86,7 +114,7 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
   remapOutput.reserve(outputSize);
   remappedNames.reserve(outputSize);
 
-  uint32_t newIdx = 0;
+  int32_t newIdx = 0;
   for (const auto& node : inputPlanNodeInfos) {
     for (int i = 0; i < node.rowType->size(); ++i) {
       remappedNames.emplace_back(
@@ -537,9 +565,6 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
 
 std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
     const ::substrait::Rel& sRel) {
-  if (sRel.has_join()) {
-    return toVeloxPlan(sRel.join());
-  }
   if (sRel.has_aggregate()) {
     return toVeloxPlan(sRel.aggregate());
   }
@@ -548,6 +573,9 @@ std::shared_ptr<const core::PlanNode> SubstraitVeloxPlanConverter::toVeloxPlan(
   }
   if (sRel.has_filter()) {
     return toVeloxPlan(sRel.filter());
+  }
+  if (sRel.has_join()) {
+    return toVeloxPlan(sRel.join());
   }
   if (sRel.has_read()) {
     return toVeloxPlan(sRel.read(), partitionIndex_, paths_, starts_, lengths_);
@@ -810,9 +838,8 @@ bool SubstraitVeloxPlanConverter::needsRowConstruct(
 
 void SubstraitVeloxPlanConverter::extractJoinKeys(
     const ::substrait::Expression& joinExpression,
-    const std::vector<PlanNodeInfo>& inputPlanNodeInfos,
-    std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>>& leftKeys,
-    std::vector<std::shared_ptr<const core::FieldAccessTypedExpr>>& rightKeys) {
+    std::vector<const ::substrait::Expression::FieldReference*>& leftExprs,
+    std::vector<const ::substrait::Expression::FieldReference*>& rightExprs) {
   std::vector<const ::substrait::Expression*> expressions;
   expressions.push_back(&joinExpression);
   while (!expressions.empty()) {
@@ -832,10 +859,8 @@ void SubstraitVeloxPlanConverter::extractJoinKeys(
             args.cbegin(), args.cend(), [](const ::substrait::Expression& arg) {
               return arg.has_selection();
             }));
-        leftKeys.emplace_back(exprConverter_->toVeloxExpr(
-            args[0].selection(), inputPlanNodeInfos));
-        rightKeys.emplace_back(exprConverter_->toVeloxExpr(
-            args[1].selection(), inputPlanNodeInfos));
+        leftExprs.push_back(&args[0].selection());
+        rightExprs.push_back(&args[1].selection());
       }
     } else {
       VELOX_FAIL(
