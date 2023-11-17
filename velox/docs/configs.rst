@@ -488,6 +488,11 @@ Each query can override the config by setting corresponding query session proper
      - string
      - 16M
      - Maximum dictionary memory that can be used in orc writer.
+   * - hive.parquet.writer.timestamp-unit
+     - hive.parquet.writer.timestamp_unit
+     - tinyint
+     - 9
+     - Timestamp unit used when writing timestamps into Parquet through Arrow bridge.
 
 ``Amazon S3 Configuration``
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^

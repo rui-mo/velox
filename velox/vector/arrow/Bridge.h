@@ -25,9 +25,17 @@
 struct ArrowArray;
 struct ArrowSchema;
 
+enum class TimestampUnit : uint8_t {
+  kSecond = 0 /*10^0 second is equal to 1 second*/,
+  kMilli = 3 /*10^3 milliseconds are equal to 1 second*/,
+  kMicro = 6 /*10^6 microseconds are equal to 1 second*/,
+  kNano = 9 /*10^9 nanoseconds are equal to 1 second*/
+};
+
 struct ArrowOptions {
   bool flattenDictionary{false};
   bool flattenConstant{false};
+  TimestampUnit timestampUnit = TimestampUnit::kNano;
 };
 
 namespace facebook::velox {
@@ -87,7 +95,7 @@ void exportToArrow(
 void exportToArrow(
     const VectorPtr&,
     ArrowSchema&,
-    const ArrowOptions& = ArrowOptions{});
+    const ArrowOptions& options = ArrowOptions{});
 
 /// Import an ArrowSchema into a Velox Type object.
 ///
