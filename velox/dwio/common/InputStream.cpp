@@ -141,11 +141,11 @@ void ReadFileInputStream::vread(
       size_t(0),
       [&](size_t acc, const auto& r) { return acc + r.length; });
   logRead(regions[0].offset, length, purpose);
-  auto readStartMs = getCurrentTimeMs();
+  auto readStartMicro = getCurrentTimeMicro();
   readFile_->preadv(regions, iobufs);
   if (stats_) {
     stats_->incRawBytesRead(length);
-    stats_->incTotalScanTime(getCurrentTimeMs() - readStartMs);
+    stats_->incTotalScanTime((getCurrentTimeMicro() - readStartMicro) * 1000);
   }
 }
 

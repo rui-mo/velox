@@ -69,7 +69,8 @@ class CachedBufferedInput : public BufferedInput {
       : BufferedInput(
             std::move(readFile),
             readerOptions.getMemoryPool(),
-            metricsLog),
+            metricsLog,
+            ioStats.get()),
         cache_(cache),
         fileNum_(fileNum),
         tracker_(std::move(tracker)),
