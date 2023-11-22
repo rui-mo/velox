@@ -105,11 +105,13 @@ PlanBuilder& PlanBuilder::tableScan(
     const RowTypePtr& dataColumns,
     const std::unordered_map<
         std::string,
-        std::shared_ptr<connector::ColumnHandle>>& assignments) {
+        std::shared_ptr<connector::ColumnHandle>>& assignments,
+        bool isFilterPushdownEnabled) {
   return TableScanBuilder(*this)
       .tableName(tableName)
       .outputType(outputType)
       .columnAliases(columnAliases)
+      .filterPushdown(isFilterPushdownEnabled)
       .subfieldFilters(subfieldFilters)
       .remainingFilter(remainingFilter)
       .dataColumns(dataColumns)
@@ -210,7 +212,7 @@ core::PlanNodePtr PlanBuilder::TableScanBuilder::build(core::PlanNodeId id) {
     tableHandle_ = std::make_shared<HiveTableHandle>(
         connectorId_,
         tableName_,
-        true,
+        isFilterPushdownEnabled_,
         std::move(filters),
         remainingFilterExpr,
         dataColumns_);
