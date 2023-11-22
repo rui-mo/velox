@@ -45,7 +45,7 @@ struct Separators {
 
   char backSlash = '\\';
   char closeBracket = ']';
-  char dot = '\0';
+  char dot = '.';
   char openBracket = '[';
   char quote = '\"';
   char wildCard = '*';
