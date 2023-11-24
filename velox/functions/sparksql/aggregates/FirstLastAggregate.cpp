@@ -156,6 +156,12 @@ class FirstAggregate : public FirstLastAggregateBase<numeric, TData> {
   explicit FirstAggregate(TypePtr resultType)
       : FirstLastAggregateBase<numeric, TData>(std::move(resultType)) {}
 
+  void initializeNewGroups(
+      char** groups,
+      folly::Range<const vector_size_t*> indices) override {
+    Aggregate::setAllNulls(groups, indices);
+  }
+
   void addRawInput(
       char** groups,
       const SelectivityVector& rows,
@@ -195,7 +201,8 @@ class FirstAggregate : public FirstLastAggregateBase<numeric, TData> {
     this->decodedValue_.decode(*args[0], rows);
 
     rows.testSelected([&](vector_size_t i) {
-      return updateValue(i, group, this->decodedValue_);
+      return updateValue(
+          i, group, this->decodedValue_, true /*ignoreExisting*/);
     });
   }
 
@@ -243,7 +250,8 @@ class FirstAggregate : public FirstLastAggregateBase<numeric, TData> {
   bool updateValue(
       vector_size_t index,
       char* group,
-      const DecodedVector& decodedVector) {
+      const DecodedVector& decodedVector,
+      bool ignoreExisting = false) {
     auto accumulator = Aggregate::value<TAccumulator>(group);
     if (accumulator->has_value()) {
       return false;
