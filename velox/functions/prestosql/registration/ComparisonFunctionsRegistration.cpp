@@ -97,7 +97,7 @@ void registerComparisonFunctions(const std::string& prefix) {
   registerFunction<BetweenFunction, bool, Timestamp, Timestamp, Timestamp>(
       {prefix + "between"});
 
-  VELOX_REGISTER_VECTOR_FUNCTION(udf_decimal_between, prefix + "between");
+  VELOX_REGISTER_VECTOR_FUNCTION(udf_decimal_between, prefix + "decimal_between");
 }
 
 } // namespace facebook::velox::functions

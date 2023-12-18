@@ -471,9 +471,6 @@ bool isSupportedSignature(
   // timestamp with time zone types.
   return !(
       useTypeName(signature, "opaque") ||
-      useTypeName(signature, "long_decimal") ||
-      useTypeName(signature, "short_decimal") ||
-      useTypeName(signature, "decimal") ||
       useTypeName(signature, "timestamp with time zone") ||
       useTypeName(signature, "interval day to second") ||
       (enableComplexType && useTypeName(signature, "unknown")));
@@ -587,7 +584,8 @@ ExpressionFuzzer::ExpressionFuzzer(
       if (!isSupportedSignature(*signature, options_.enableComplexTypes)) {
         continue;
       }
-      if (!(signature->variables().empty() || options_.enableComplexTypes)) {
+      if (!(signature->variables().empty() || options_.enableComplexTypes ||
+            options_.enableDecimalType)) {
         LOG(WARNING) << "Skipping unsupported signature: " << function.first
                      << signature->toString();
         continue;
@@ -1081,7 +1079,8 @@ core::TypedExprPtr ExpressionFuzzer::generateExpression(
     } else {
       expression = generateExpressionFromConcreteSignatures(
           returnType, chosenFunctionName);
-      if (!expression && options_.enableComplexTypes) {
+      if (!expression &&
+          (options_.enableComplexTypes || options_.enableDecimalType)) {
         expression = generateExpressionFromSignatureTemplate(
             returnType, chosenFunctionName);
       }

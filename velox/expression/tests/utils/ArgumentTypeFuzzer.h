@@ -65,6 +65,10 @@ class ArgumentTypeFuzzer {
     return signature_.variables();
   }
 
+  /// Bind each integer variable that is not determined to a randomly generated
+  /// value.
+  void determineUnboundedIntegerVariables();
+
   /// Bind each type variable that is not determined by the return type to a
   /// randomly generated type.
   void determineUnboundedTypeVariables();
@@ -82,6 +86,9 @@ class ArgumentTypeFuzzer {
 
   /// Bindings between type variables and their actual types.
   std::unordered_map<std::string, TypePtr> bindings_;
+
+  /// Bindings between integer variables and their values.
+  std::unordered_map<std::string, int> integerVariablesBindings_;
 
   /// RNG to generate random types for unbounded type variables when necessary.
   std::mt19937& rng_;

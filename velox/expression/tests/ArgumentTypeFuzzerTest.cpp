@@ -59,6 +59,35 @@ class ArgumentTypeFuzzerTest : public testing::Test {
     }
   }
 
+  void testFuzzingDecimalSuccess(
+      const std::shared_ptr<exec::FunctionSignature>& signature,
+      const TypePtr& returnType,
+      int32_t expectedArguments) {
+    std::mt19937 seed{0};
+    ArgumentTypeFuzzer fuzzer{*signature, returnType, seed};
+    ASSERT_TRUE(fuzzer.fuzzArgumentTypes(kMaxVariadicArgs));
+
+    auto& argumentTypes = fuzzer.argumentTypes();
+    ASSERT_LE(argumentTypes.size(), expectedArguments);
+
+    auto& argumentSignatures = signature->argumentTypes();
+    int i;
+    for (i = 0; i < expectedArguments; ++i) {
+      ASSERT_TRUE(argumentTypes[i]->isDecimal())
+          << "at " << i
+          << ": Expected decimal. Got: " << argumentTypes[i]->toString();
+    }
+
+    if (i < argumentTypes.size()) {
+      ASSERT_TRUE(signature->variableArity());
+      ASSERT_LE(
+          argumentTypes.size() - argumentSignatures.size(), kMaxVariadicArgs);
+      for (int j = i; j < argumentTypes.size(); ++j) {
+        ASSERT_TRUE(argumentTypes[j]->equivalent(*argumentTypes[i - 1]));
+      }
+    }
+  }
+
   void testFuzzingFailure(
       const std::shared_ptr<exec::FunctionSignature>& signature,
       const TypePtr& returnType) {
@@ -222,9 +251,36 @@ TEST_F(ArgumentTypeFuzzerTest, any) {
   ASSERT_TRUE(argumentTypes[0] != nullptr);
 }
 
-TEST_F(ArgumentTypeFuzzerTest, unsupported) {
+TEST_F(ArgumentTypeFuzzerTest, decimal) {
+  auto signature = exec::FunctionSignatureBuilder()
+                       .integerVariable("a_scale")
+                       .integerVariable("a_precision")
+                       .returnType("boolean")
+                       .argumentType("decimal(a_precision, a_scale)")
+                       .argumentType("decimal(a_precision, a_scale)")
+                       .argumentType("decimal(a_precision, a_scale)")
+                       .build();
+
+  testFuzzingDecimalSuccess(signature, BOOLEAN(), 3);
+
+  signature = exec::FunctionSignatureBuilder()
+          .integerVariable("a_precision")
+          .integerVariable("a_scale")
+          .integerVariable("b_precision")
+          .integerVariable("b_scale")
+          .integerVariable(
+              "r_precision",
+              "min(38, max(a_precision - a_scale, b_precision - b_scale) + max(a_scale, b_scale) + 1)")
+          .integerVariable("r_scale", "max(a_scale, b_scale)")
+          .returnType("DECIMAL(r_precision, r_scale)")
+          .argumentType("DECIMAL(a_precision, a_scale)")
+          .argumentType("DECIMAL(b_precision, b_scale)")
+          .build();
+
+  testFuzzingDecimalSuccess(signature, DECIMAL(13, 6), 2);
+
   // Constraints on the return type is not supported.
-  auto signature =
+  signature =
       exec::FunctionSignatureBuilder()
           .integerVariable("a_scale")
           .integerVariable("b_scale")
@@ -239,7 +295,7 @@ TEST_F(ArgumentTypeFuzzerTest, unsupported) {
           .argumentType("decimal(b_precision, b_scale)")
           .build();
 
-  testFuzzingFailure(signature, DECIMAL(13, 6));
+  testFuzzingDecimalSuccess(signature, DECIMAL(13, 6), 2);
 }
 
 TEST_F(ArgumentTypeFuzzerTest, lambda) {

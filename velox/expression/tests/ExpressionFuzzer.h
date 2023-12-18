@@ -48,6 +48,10 @@ class ExpressionFuzzer {
     // types.
     bool enableComplexTypes = false;
 
+    // Enable testing of function signatures with decimal argument or return
+    // types.
+    bool enableDecimalType = false;
+
     // Enable generation of expressions where one input column can be used by
     // multiple subexpressions.
     bool enableColumnReuse = false;

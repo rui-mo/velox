@@ -21,18 +21,57 @@
 
 #include "velox/expression/ReverseSignatureBinder.h"
 #include "velox/expression/SignatureBinder.h"
+#include "velox/expression/type_calculation/TypeCalculation.h"
 #include "velox/type/Type.h"
 #include "velox/vector/fuzzer/VectorFuzzer.h"
 
 namespace facebook::velox::test {
 
 std::string typeToBaseName(const TypePtr& type) {
-  return boost::algorithm::to_lower_copy(std::string{type->kindName()});
+  return type->isDecimal()
+      ? "DECIMAL"
+      : boost::algorithm::to_lower_copy(std::string{type->kindName()});
 }
 
 std::optional<TypeKind> baseNameToTypeKind(const std::string& typeName) {
   auto kindName = boost::algorithm::to_upper_copy(typeName);
   return tryMapNameToTypeKind(kindName);
+}
+
+void ArgumentTypeFuzzer::determineUnboundedIntegerVariables() {
+  std::srand(std::time(nullptr));
+  // Assign a random value for all integer values.
+  for (const auto& [variableName, variableInfo] : variables()) {
+    if (!variableInfo.isIntegerParameter() ||
+        integerVariablesBindings_.count(variableName)) {
+      continue;
+    }
+
+    if (auto pos = variableName.find("precision"); pos == std::string::npos) {
+      integerVariablesBindings_[variableName] = rand();
+    } else {
+      // Handle decimal precisions and scales.
+      const int32_t precision = std::max(rand() % 38, 1);
+      integerVariablesBindings_[variableName] = precision;
+      const auto colName = variableName.substr(0, pos);
+      // Corresponding scale should not exceed the generated precision.
+      for (const auto& [name, info] : variables()) {
+        if (name == colName + "scale") {
+          integerVariablesBindings_[name] = rand() % precision;
+        }
+      }
+    }
+  }
+
+  // Handle constraints.
+  for (const auto& [variableName, variableInfo] : variables()) {
+    const auto constraint = variableInfo.constraint();
+    if (constraint == "") {
+      continue;
+    }
+    auto calculation = fmt::format("{}={}", variableName, constraint);
+    expression::calculation::evaluate(calculation, integerVariablesBindings_);
+  }
 }
 
 void ArgumentTypeFuzzer::determineUnboundedTypeVariables() {
@@ -80,11 +119,18 @@ bool ArgumentTypeFuzzer::fuzzArgumentTypes(uint32_t maxVariadicArgs) {
     }
   }
 
+  determineUnboundedIntegerVariables();
   determineUnboundedTypeVariables();
   for (auto i = 0; i < formalArgsCnt; i++) {
     TypePtr actualArg;
-    if (formalArgs[i].baseName() == "any") {
+    auto baseName = formalArgs[i].baseName();
+    folly::toLowerAscii(baseName);
+    if (baseName == "any") {
       actualArg = randType();
+    } else if (baseName == "decimal") {
+      actualArg = exec::SignatureBinder::tryResolveType(
+          formalArgs[i], variables(), bindings_, integerVariablesBindings_);
+      VELOX_CHECK(actualArg != nullptr);
     } else {
       actualArg = exec::SignatureBinder::tryResolveType(
           formalArgs[i], variables(), bindings_);
@@ -113,9 +159,20 @@ TypePtr ArgumentTypeFuzzer::fuzzReturnType() {
       nullptr,
       "Only fuzzing uninitialized return type is allowed.");
 
+  determineUnboundedIntegerVariables();
   determineUnboundedTypeVariables();
-  if (signature_.returnType().baseName() == "any") {
+  auto baseName = signature_.returnType().baseName();
+  folly::toLowerAscii(baseName);
+  if (baseName == "any") {
     returnType_ = randType();
+    return returnType_;
+  } else if (baseName == "decimal") {
+    returnType_ = exec::SignatureBinder::tryResolveType(
+        signature_.returnType(),
+        variables(),
+        bindings_,
+        integerVariablesBindings_);
+    VELOX_CHECK_NE(returnType_, nullptr);
     return returnType_;
   } else {
     returnType_ = exec::SignatureBinder::tryResolveType(
