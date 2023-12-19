@@ -84,9 +84,8 @@ exec::AggregateRegistrationResult registerSum(
                 BIGINT());
           case TypeKind::BIGINT: {
             if (inputType->isShortDecimal()) {
-              auto sumType = exec::isPartialOutput(step)
-                  ? resultType->childAt(0)
-                  : resultType;
+              auto sumType =
+                  resultType->isRow() ? resultType->childAt(0) : resultType;
               if (sumType->isShortDecimal()) {
                 return std::make_unique<DecimalSumAggregate<int64_t, int64_t>>(
                     resultType, sumType);
@@ -101,9 +100,8 @@ exec::AggregateRegistrationResult registerSum(
           }
           case TypeKind::HUGEINT: {
             if (inputType->isLongDecimal()) {
-              auto sumType = exec::isPartialOutput(step)
-                  ? resultType->childAt(0)
-                  : resultType;
+              auto sumType =
+                  resultType->isRow() ? resultType->childAt(0) : resultType;
               // If inputType is long decimal,
               // its output type always be long decimal.
               return std::make_unique<DecimalSumAggregate<int128_t, int128_t>>(
