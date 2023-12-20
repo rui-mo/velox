@@ -234,6 +234,65 @@ bool Timestamp::epochToUtc(int64_t epoch, std::tm& tm) {
   return true;
 }
 
+char* Timestamp::tmToString(
+    const std::tm& tmValue,
+    uint64_t nanos,
+    const TimestampToStringOptions& options,
+    const char* startPosition) {
+  VELOX_DCHECK_GE(nanos, 0);
+  VELOX_DCHECK_LT(nanos, 1'000'000'000);
+
+  char* writePosition = startPosition;
+  if (options.mode != TimestampToStringOptions::Mode::kTimeOnly) {
+    int n = kTmYearBase + tmValue.tm_year;
+    bool negative = n < 0;
+    if (negative) {
+      *writePosition++ = '-';
+      n = -n;
+    }
+    while (n > 0) {
+      *writePosition++ = '0' + n % 10;
+      n /= 10;
+    }
+    auto zeroPaddingYearSize = negative + 4;
+    if (options.zeroPaddingYear && out.size() < zeroPaddingYearSize) {
+      while (out.size() < zeroPaddingYearSize) {
+        out += '0';
+      }
+    }
+    std::reverse(out.begin() + negative, out.end());
+    out += '-';
+    appendSmallInt(1 + tmValue.tm_mon, out);
+    out += '-';
+    appendSmallInt(tmValue.tm_mday, out);
+    if (options.mode == TimestampToStringOptions::Mode::kDateOnly) {
+      return out;
+    }
+
+    out += options.dateTimeSeparator;
+  }
+
+  appendSmallInt(tmValue.tm_hour, out);
+  out += ':';
+  appendSmallInt(tmValue.tm_min, out);
+  out += ':';
+  appendSmallInt(tmValue.tm_sec, out);
+  out += '.';
+  int offset = out.size();
+  if (options.precision == TimestampToStringOptions::Precision::kMilliseconds) {
+    nanos /= 1'000'000;
+  }
+  while (nanos > 0) {
+    out += '0' + nanos % 10;
+    nanos /= 10;
+  }
+  while (out.size() - offset < static_cast<int8_t>(options.precision)) {
+    out += '0';
+  }
+  std::reverse(out.begin() + offset, out.end());
+  return out;
+}
+
 std::string Timestamp::tmToString(
     const std::tm& tmValue,
     uint64_t nanos,
