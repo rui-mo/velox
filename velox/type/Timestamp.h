@@ -33,11 +33,14 @@ namespace facebook::velox {
 struct TimestampToStringOptions {
   enum class Precision : int8_t {
     kMilliseconds = 3,
+    kMicroseconds = 6,
     kNanoseconds = 9,
   };
 
   Precision precision = Precision::kNanoseconds;
 
+  bool leadingPositiveSign = false;
+  bool skipZeroSuffix = false;
   bool zeroPaddingYear = false;
   char dateTimeSeparator = 'T';
 

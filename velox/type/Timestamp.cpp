@@ -247,6 +247,7 @@ std::string Timestamp::tmToString(
   if (options.mode != TimestampToStringOptions::Mode::kTimeOnly) {
     int n = kTmYearBase + tmValue.tm_year;
     bool negative = n < 0;
+    const bool leadingPositiveSign = options.leadingPositiveSign && n > 9999;
     if (negative) {
       out += '-';
       n = -n;
@@ -260,6 +261,9 @@ std::string Timestamp::tmToString(
       while (out.size() < zeroPaddingYearSize) {
         out += '0';
       }
+    }
+    if (leadingPositiveSign) {
+      out += '+';
     }
     std::reverse(out.begin() + negative, out.end());
     out += '-';
@@ -278,16 +282,31 @@ std::string Timestamp::tmToString(
   appendSmallInt(tmValue.tm_min, out);
   out += ':';
   appendSmallInt(tmValue.tm_sec, out);
-  out += '.';
-  int offset = out.size();
   if (options.precision == TimestampToStringOptions::Precision::kMilliseconds) {
     nanos /= 1'000'000;
+  } else if (
+      options.precision == TimestampToStringOptions::Precision::kMicroseconds) {
+    nanos /= 1'000;
   }
+  if (options.skipZeroSuffix && nanos == 0) {
+    return out;
+  }
+  out += '.';
+  int offset = out.size();
+  int skipZeros = 0;
   while (nanos > 0) {
-    out += '0' + nanos % 10;
+    if (nanos % 10 == 0) {
+      if (!options.skipZeroSuffix) {
+        out += '0';
+      } else {
+        skipZeros += 1;
+      }
+    } else {
+      out += '0' + nanos % 10;
+    }
     nanos /= 10;
   }
-  while (out.size() - offset < precisionWidth) {
+  while (out.size() - offset < precisionWidth - skipZeros) {
     out += '0';
   }
   std::reverse(out.begin() + offset, out.end());

@@ -418,5 +418,71 @@ TEST(TimestampTest, tmToStringTimestamp) {
   // %FT%T - equivalent to "%Y-%m-%dT%H:%M:%S" (the ISO 8601 timestamp format)
   testTmToString("%FT%T", TimestampToStringOptions::Mode::kFull);
 }
+
+TEST(TimestampTest, leadingPositiveSign) {
+  TimestampToStringOptions options = {
+      .leadingPositiveSign = true,
+      .zeroPaddingYear = true,
+      .dateTimeSeparator = ' ',
+  };
+  auto testTmToString = [&](Timestamp ts, const std::string& expected) {
+    std::tm tm;
+    Timestamp::epochToUtc(ts.getSeconds(), tm);
+    ASSERT_EQ(Timestamp::tmToString(tm, ts.getNanos(), options), expected);
+  };
+
+  const std::vector<Timestamp> input = {
+      Timestamp(253405036800, 0), Timestamp(253402231016, 0)};
+
+  const std::vector<std::string> expected = {
+      "+10000-02-01 16:00:00.000000000", "9999-12-31 04:36:56.000000000"};
+
+  for (int32_t i = 0; i < input.size(); ++i) {
+    testTmToString(input[i], expected[i]);
+  }
+}
+
+TEST(TimestampTest, skipZeroSuffix) {
+  TimestampToStringOptions options = {
+      .precision = TimestampToStringOptions::Precision::kMicroseconds,
+      .skipZeroSuffix = true,
+      .zeroPaddingYear = true,
+      .dateTimeSeparator = ' ',
+  };
+  auto testTmToString = [&](Timestamp ts, const std::string& expected) {
+    std::tm tm;
+    Timestamp::epochToUtc(ts.getSeconds(), tm);
+    ASSERT_EQ(Timestamp::tmToString(tm, ts.getNanos(), options), expected);
+  };
+
+  const std::vector<Timestamp> input = {
+      Timestamp(-946684800, 0),
+      Timestamp(0, 0),
+      Timestamp(0, 365),
+      Timestamp(0, 65873),
+      Timestamp(94668480000, 0),
+      Timestamp(946729316, 129999999),
+      Timestamp(946729316, 129990000),
+      Timestamp(946729316, 129900000),
+      Timestamp(946729316, 129000000),
+      Timestamp(-50049331200, 726600000)};
+
+  const std::vector<std::string> expected = {
+      "1940-01-02 00:00:00",
+      "1970-01-01 00:00:00",
+      "1970-01-01 00:00:00",
+      "1970-01-01 00:00:00.000065",
+      "4969-12-04 00:00:00",
+      "2000-01-01 12:21:56.129999",
+      "2000-01-01 12:21:56.12999",
+      "2000-01-01 12:21:56.1299",
+      "2000-01-01 12:21:56.129",
+      "0384-01-01 08:00:00.7266"};
+
+  for (int32_t i = 0; i < input.size(); ++i) {
+    testTmToString(input[i], expected[i]);
+  }
+}
+
 } // namespace
 } // namespace facebook::velox
