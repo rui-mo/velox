@@ -348,4 +348,10 @@ std::string SplitReader::toString() const {
       static_cast<const void*>(baseRowReader_.get()));
 }
 
+void SplitReader::close() {
+  if (baseReader_) {
+    baseReader_->close();
+  }
+}
+
 } // namespace facebook::velox::connector::hive

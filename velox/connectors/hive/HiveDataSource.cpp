@@ -564,6 +564,7 @@ void HiveDataSource::addSplit(std::shared_ptr<ConnectorSplit> split) {
   auto input = createBufferedInput(*fileHandle, readerOpts_);
 
   if (splitReader_) {
+    splitReader_->close();
     splitReader_.reset();
   }
   splitReader_ = createSplitReader();

@@ -29,6 +29,19 @@ using cache::CoalescedLoad;
 using cache::ScanTracker;
 using cache::TrackingId;
 
+void DirectBufferedInput::close() {
+  for (auto& load : coalescedLoads_) {
+    if (load->state() == cache::CoalescedLoad::State::kLoading) {
+      folly::SemiFuture<bool> waitFuture(false);
+      if (!load->loadOrFuture(&waitFuture)) {
+        auto& exec = folly::QueuedImmediateExecutor::instance();
+        std::move(waitFuture).via(&exec).wait();
+      }
+    }
+    load->cancel();
+  }
+}
+
 std::unique_ptr<SeekableInputStream> DirectBufferedInput::enqueue(
     Region region,
     const StreamIdentifier* sid = nullptr) {

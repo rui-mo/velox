@@ -196,6 +196,9 @@ class Reader {
    */
   virtual std::unique_ptr<RowReader> createRowReader(
       const RowReaderOptions& options = {}) const = 0;
+
+  // Clean up the resource, called when pipeline is finished.
+  virtual void close() = 0;
 };
 
 } // namespace facebook::velox::dwio::common

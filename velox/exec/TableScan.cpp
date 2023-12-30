@@ -314,4 +314,11 @@ void TableScan::addDynamicFilter(
   }
 }
 
+void TableScan::close() {
+  if (dataSource_) {
+    dataSource_->close();
+  }
+  Operator::close();
+}
+
 } // namespace facebook::velox::exec

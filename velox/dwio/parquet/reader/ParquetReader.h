@@ -133,6 +133,8 @@ class ParquetReader : public dwio::common::Reader {
   std::unique_ptr<dwio::common::RowReader> createRowReader(
       const dwio::common::RowReaderOptions& options = {}) const override;
 
+  void close() override;
+
  private:
   std::shared_ptr<ReaderBase> readerBase_;
 };

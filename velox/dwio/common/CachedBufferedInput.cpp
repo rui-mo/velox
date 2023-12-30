@@ -37,6 +37,19 @@ using cache::SsdPin;
 using cache::TrackingId;
 using memory::MemoryAllocator;
 
+void CachedBufferedInput::close() {
+  for (auto& load : allCoalescedLoads_) {
+    if (load->state() == cache::CoalescedLoad::State::kLoading) {
+      folly::SemiFuture<bool> waitFuture(false);
+      if (!load->loadOrFuture(&waitFuture)) {
+        auto& exec = folly::QueuedImmediateExecutor::instance();
+        std::move(waitFuture).via(&exec).wait();
+      }
+    }
+    load->cancel();
+  }
+}
+
 std::unique_ptr<SeekableInputStream> CachedBufferedInput::enqueue(
     Region region,
     const StreamIdentifier* si = nullptr) {

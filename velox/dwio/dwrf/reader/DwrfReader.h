@@ -333,6 +333,12 @@ class DwrfReader : public dwio::common::Reader {
   std::unique_ptr<DwrfRowReader> createDwrfRowReader(
       const dwio::common::RowReaderOptions& options = {}) const;
 
+  void close() override {
+    if (readerBase_) {
+      readerBase_->close();
+    }
+  }
+
   /**
    * Create a reader to the for the dwrf file.
    * @param stream the stream to read
