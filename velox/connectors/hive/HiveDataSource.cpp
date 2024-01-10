@@ -158,11 +158,7 @@ HiveDataSource::HiveDataSource(
   for (auto& [k, v] : hiveTableHandle_->subfieldFilters()) {
     filters.emplace(k.clone(), v->clone());
   }
-  auto remainingFilter = extractFiltersFromRemainingFilter(
-      hiveTableHandle_->remainingFilter(),
-      expressionEvaluator_,
-      false,
-      filters);
+  auto remainingFilter = hiveTableHandle_->remainingFilter();
 
   std::vector<common::Subfield> remainingFilterSubfields;
   if (remainingFilter) {
@@ -207,10 +203,10 @@ HiveDataSource::HiveDataSource(
       hiveTableHandle_->dataColumns(),
       partitionKeys_,
       pool_);
-  if (remainingFilter) {
-    metadataFilter_ = std::make_shared<common::MetadataFilter>(
-        *scanSpec_, *remainingFilter, expressionEvaluator_);
-  }
+  // if (remainingFilter) {
+  //   metadataFilter_ = std::make_shared<common::MetadataFilter>(
+  //       *scanSpec_, *remainingFilter, expressionEvaluator_);
+  // }
 
   ioStats_ = std::make_shared<io::IoStatistics>();
 }

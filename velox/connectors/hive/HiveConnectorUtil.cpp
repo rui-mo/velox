@@ -561,19 +561,19 @@ std::unique_ptr<dwio::common::BufferedInput> createBufferedInput(
     const ConnectorQueryCtx* connectorQueryCtx,
     std::shared_ptr<io::IoStatistics> ioStats,
     folly::Executor* executor) {
-  if (connectorQueryCtx->cache()) {
-    return std::make_unique<dwio::common::CachedBufferedInput>(
-        fileHandle.file,
-        dwio::common::MetricsLog::voidLog(),
-        fileHandle.uuid.id(),
-        connectorQueryCtx->cache(),
-        Connector::getTracker(
-            connectorQueryCtx->scanId(), readerOpts.loadQuantum()),
-        fileHandle.groupId.id(),
-        ioStats,
-        executor,
-        readerOpts);
-  }
+  // if (connectorQueryCtx->cache()) {
+  //   return std::make_unique<dwio::common::CachedBufferedInput>(
+  //       fileHandle.file,
+  //       dwio::common::MetricsLog::voidLog(),
+  //       fileHandle.uuid.id(),
+  //       connectorQueryCtx->cache(),
+  //       Connector::getTracker(
+  //           connectorQueryCtx->scanId(), readerOpts.loadQuantum()),
+  //       fileHandle.groupId.id(),
+  //       ioStats,
+  //       executor,
+  //       readerOpts);
+  // }
   return std::make_unique<dwio::common::DirectBufferedInput>(
       fileHandle.file,
       dwio::common::MetricsLog::voidLog(),
