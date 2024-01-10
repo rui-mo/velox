@@ -15,6 +15,8 @@
  */
 
 #include "velox/dwio/common/DirectBufferedInput.h"
+#include <iostream>
+#include <thread>
 #include "velox/common/memory/Allocation.h"
 #include "velox/common/process/TraceContext.h"
 #include "velox/dwio/common/DirectInputStream.h"
@@ -32,6 +34,8 @@ using cache::TrackingId;
 std::unique_ptr<SeekableInputStream> DirectBufferedInput::enqueue(
     Region region,
     const StreamIdentifier* sid = nullptr) {
+  std::cout << "enqueue, region.offset: " << region.offset
+            << ", length: " << region.length << std::endl;
   if (!coalescedLoads_.empty()) {
     // Results of previous load are no more available here.
     coalescedLoads_.clear();
@@ -78,7 +82,8 @@ namespace {
 
 // True if the percentage is high enough to warrant prefetch.
 bool isPrefetchablePct(int32_t pct) {
-  return pct >= FLAGS_cache_prefetch_min_pct;
+  return true;
+  // return pct >= FLAGS_cache_prefetch_min_pct;
 }
 
 int32_t adjustedReadPct(const cache::TrackingData& trackingData) {
@@ -180,12 +185,25 @@ void DirectBufferedInput::makeLoads(
         readRegion(ranges, shouldPrefetch);
       });
   if (shouldPrefetch && executor_) {
+    std::cout << "coalescedLoads_.size(): " << coalescedLoads_.size()
+              << std::endl;
     for (auto i = 0; i < coalescedLoads_.size(); ++i) {
       auto& load = coalescedLoads_[i];
       if (load->state() == CoalescedLoad::State::kPlanned) {
+        const auto& requests =
+            std::dynamic_pointer_cast<DirectCoalescedLoad>(load)->requests();
+        std::cout << "requests.size(): " << requests.size() << std::endl;
+        for (const auto& request : requests) {
+          std::cout << "request region offset: " << request.region.offset
+                    << ", length: " << request.region.length << std::endl;
+        }
         executor_->add([pendingLoad = load]() {
+          std::cout << "log1" << std::endl;
+          // std::cout << "thread " << std::this_thread::get_id() << std::endl;
           process::TraceContext trace("Read Ahead");
           pendingLoad->loadOrFuture(nullptr);
+          std::cout << "log2" << std::endl;
+          // std::cout << "thread " << std::this_thread::get_id() << std::endl;
         });
       }
     }
@@ -272,6 +290,7 @@ std::vector<cache::CachePin> DirectCoalescedLoad::loadData(bool isPrefetch) {
     lastEnd = region.offset + request.loadSize;
     size += std::min<int32_t>(loadQuantum_, region.length);
   }
+  std::cout << "input read" << std::endl;
   input_->read(buffers, requests_[0].region.offset, LogType::FILE);
   ioStats_->read().increment(size);
   ioStats_->incRawOverreadBytes(overread);

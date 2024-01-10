@@ -137,11 +137,11 @@ bool HiveConfig::ignoreMissingFiles(const Config* session) const {
 }
 
 int64_t HiveConfig::maxCoalescedBytes() const {
-  return config_->get<int64_t>(kMaxCoalescedBytes, 128 << 20);
+  return config_->get<int64_t>(kMaxCoalescedBytes, 50 << 10);
 }
 
 int32_t HiveConfig::maxCoalescedDistanceBytes() const {
-  return config_->get<int32_t>(kMaxCoalescedDistanceBytes, 512 << 10);
+  return config_->get<int32_t>(kMaxCoalescedDistanceBytes, 0);
 }
 
 int32_t HiveConfig::prefetchRowGroups() const {
@@ -149,7 +149,7 @@ int32_t HiveConfig::prefetchRowGroups() const {
 }
 
 int32_t HiveConfig::loadQuantum() const {
-  return config_->get<int32_t>(kLoadQuantum, 8 << 20);
+  return config_->get<int32_t>(kLoadQuantum, 50 << 10);
 }
 
 int32_t HiveConfig::numCacheFileHandles() const {
@@ -195,11 +195,11 @@ uint64_t HiveConfig::sortWriterMaxOutputBytes(const Config* session) const {
 }
 
 uint64_t HiveConfig::footerEstimatedSize() const {
-  return config_->get<uint64_t>(kFooterEstimatedSize, 1UL << 20);
+  return config_->get<uint64_t>(kFooterEstimatedSize, 100);
 }
 
 uint64_t HiveConfig::filePreloadThreshold() const {
-  return config_->get<uint64_t>(kFilePreloadThreshold, 8UL << 20);
+  return config_->get<uint64_t>(kFilePreloadThreshold, 100);
 }
 
 bool HiveConfig::s3UseProxyFromEnv() const {

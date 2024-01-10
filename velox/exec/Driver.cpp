@@ -27,6 +27,8 @@
 #include "velox/exec/Operator.h"
 #include "velox/exec/Task.h"
 
+#include <iostream>
+
 using facebook::velox::common::testutil::TestValue;
 
 namespace facebook::velox::exec {
@@ -829,6 +831,7 @@ void Driver::closeOperators() {
 }
 
 void Driver::close() {
+  std::cout << "close" << std::endl;
   if (closed_) {
     // Already closed.
     return;

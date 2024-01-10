@@ -20,6 +20,7 @@
 #include "velox/common/time/Timer.h"
 #include "velox/dwio/common/DirectBufferedInput.h"
 #include "velox/dwio/common/DirectInputStream.h"
+#include <iostream>
 
 using ::facebook::velox::common::Region;
 
@@ -132,6 +133,8 @@ makeRanges(size_t size, memory::Allocation& data, std::string& tinyData) {
 } // namespace
 
 void DirectInputStream::loadSync() {
+  std::cout << "loadSync loadedRegion_.offset: " << loadedRegion_.offset
+            << ", loadedRegion_.length: " << loadedRegion_.length << std::endl;
   if (region_.length < DirectBufferedInput::kTinySize &&
       data_.numPages() == 0) {
     tinyData_.resize(region_.length);

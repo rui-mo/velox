@@ -24,7 +24,9 @@
 #include "velox/exec/tests/utils/PlanBuilder.h"
 #include "velox/type/tests/SubfieldFiltersBuilder.h"
 
+#include <iostream>
 #include "velox/connectors/hive/HiveConfig.h"
+#include "velox/exec/PlanNodeStats.h"
 
 using namespace facebook::velox;
 using namespace facebook::velox::exec;
@@ -42,7 +44,9 @@ class ParquetTableScanTest : public HiveConnectorTestBase {
         connector::getConnectorFactory(
             connector::hive::HiveConnectorFactory::kHiveConnectorName)
             ->newConnector(
-                kHiveConnectorId, std::make_shared<core::MemConfig>());
+                kHiveConnectorId,
+                std::make_shared<core::MemConfig>(),
+                executor_.get());
     connector::registerConnector(hiveConnector);
   }
 
@@ -121,6 +125,9 @@ class ParquetTableScanTest : public HiveConnectorTestBase {
     return makeHiveConnectorSplits(
         filePath, 1, dwio::common::FileFormat::PARQUET)[0];
   }
+
+  std::shared_ptr<folly::Executor> executor_ =
+      std::make_shared<folly::CPUThreadPoolExecutor>(1);
 
  private:
   RowTypePtr getRowType(std::vector<std::string>&& outputColumnNames) const {
@@ -408,11 +415,8 @@ TEST_F(ParquetTableScanTest, readAsLowerCase) {
                   .tableScan(ROW({"a"}, {BIGINT()}), {}, "")
                   .planNode();
   CursorParameters params;
-  std::shared_ptr<folly::Executor> executor =
-      std::make_shared<folly::CPUThreadPoolExecutor>(
-          std::thread::hardware_concurrency());
   std::shared_ptr<core::QueryCtx> queryCtx =
-      std::make_shared<core::QueryCtx>(executor.get());
+      std::make_shared<core::QueryCtx>(executor_.get());
   std::unordered_map<std::string, std::string> session = {
       {std::string(
            connector::hive::HiveConfig::kFileColumnNamesReadAsLowerCaseSession),
@@ -441,6 +445,70 @@ TEST_F(ParquetTableScanTest, readAsLowerCase) {
   ASSERT_TRUE(waitForTaskCompletion(result.first->task().get()));
   assertEqualResults(
       result.second, {makeRowVector({"a"}, {makeFlatVector<int64_t>({0, 1})})});
+  if (result.first) {
+    result.first->task()->requestCancel().wait();
+    // result.first->task().reset();
+  }
+  std::cout << "pool: " << queryCtx->pool()->treeMemoryUsage() << std::endl;
+}
+
+TEST_F(ParquetTableScanTest, readRowGroup) {
+  auto plan = PlanBuilder(pool_.get())
+                  .tableScan(
+                      ROW({"a"}, {INTEGER()}),
+                      {},
+                      "b == c",
+                      ROW({"b", "c", "a"}, {INTEGER(), INTEGER(), INTEGER()}))
+                  .planNode();
+  CursorParameters params;
+  auto pool = memory::deprecatedDefaultMemoryManager().addRootPool("scan");
+  std::unordered_map<std::string, std::shared_ptr<Config>> connectorConfigs =
+      {};
+  std::shared_ptr<core::QueryCtx> queryCtx = std::make_shared<core::QueryCtx>(
+      executor_.get(), core::QueryConfig{{}}, connectorConfigs, nullptr, pool);
+  std::unordered_map<std::string, std::string> session = {
+      {std::string(connector::hive::HiveConfig::kLoadQuantum), "51200"},
+      {std::string(connector::hive::HiveConfig::kMaxCoalescedDistanceBytes),
+       "0"},
+      {std::string(connector::hive::HiveConfig::kMaxCoalescedBytes), "51200"}};
+  queryCtx->setConnectorSessionOverridesUnsafe(
+      kHiveConnectorId, std::move(session));
+  params.queryCtx = queryCtx;
+  params.planNode = plan;
+  const int numSplitsPerFile = 1;
+
+  bool noMoreSplits = false;
+  auto addSplits = [&](exec::Task* task) {
+    if (!noMoreSplits) {
+      auto const splits = HiveConnectorTestBase::makeHiveConnectorSplits(
+          {getExampleFilePath("row_group.parquet")},
+          numSplitsPerFile,
+          dwio::common::FileFormat::PARQUET);
+      for (const auto& split : splits) {
+        task->addSplit("0", exec::Split(split));
+      }
+      task->noMoreSplits("0");
+    }
+    noMoreSplits = true;
+  };
+  auto result = readCursor(params, addSplits);
+  ASSERT_TRUE(waitForTaskCompletion(result.first->task().get()));
+  //   assertEqualResults(
+  //       result.second, {makeRowVector({"a"}, {makeFlatVector<int64_t>({0,
+  //       1})})});
+  std::cout << printPlanWithStats(
+                   *plan, result.first->task()->taskStats(), true)
+            << std::endl;
+//   for (const auto& rv : result.second) {
+//     for (int32_t i = 0; i < rv->size(); ++i) {
+//       std::cout << rv->toString(i) << std::endl;
+//     }
+//   }
+  if (result.first) {
+    result.first->task()->requestCancel().wait();
+    // result.first->task().reset();
+  }
+  std::cout << "pool: " << pool->treeMemoryUsage() << std::endl;
 }
 
 int main(int argc, char** argv) {
