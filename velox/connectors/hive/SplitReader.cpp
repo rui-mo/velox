@@ -268,9 +268,9 @@ velox::variant convertFromString(const std::optional<std::string>& value) {
       return velox::variant::binary((value.value()));
     }
     auto result = velox::util::Converter<ToKind>::cast(value.value());
-    if constexpr (ToKind == TypeKind::TIMESTAMP) {
-      result.toGMT(Timestamp::defaultTimezone());
-    }
+    // if constexpr (ToKind == TypeKind::TIMESTAMP) {
+    //   result.toGMT(Timestamp::defaultTimezone());
+    // }
     return velox::variant(result);
   }
   return velox::variant(ToKind);
