@@ -289,15 +289,16 @@ class DecimalAverageAggregate : public DecimalAggregate<TInputType> {
     if (overflow) {
       return std::nullopt;
     }
-    auto rescaledValue = DecimalUtil::rescaleWithRoundUp<int128_t, TResultType>(
+    TResultType rescaledValue;
+    const auto status = DecimalUtil::rescaleWithRoundUp<int128_t, TResultType>(
         avg,
         avgPrecision,
         avgScale,
         resultPrecision,
         resultScale,
-        overflow,
-        false);
-    return overflow ? std::nullopt : rescaledValue;
+        rescaledValue);
+    return status.ok() ? std::optional<TResultType>(rescaledValue)
+                       : std::nullopt;
   }
 
  private:
