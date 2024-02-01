@@ -20,7 +20,9 @@
 #include "velox/connectors/hive/HiveConnectorSplit.h"
 #include "velox/connectors/hive/HiveConnectorUtil.h"
 #include "velox/connectors/hive/TableHandle.h"
+#include "velox/core/Expressions.h"
 #include "velox/dwio/common/ReaderFactory.h"
+#include "velox/expression/Expr.h"
 
 namespace facebook::velox::connector::hive {
 
@@ -252,7 +254,10 @@ namespace {
 template <TypeKind ToKind>
 velox::variant convertFromString(
     const std::optional<std::string>& value,
-    const TypePtr& toType) {
+    const TypePtr& toType,
+    memory::MemoryPool* pool,
+    core::ExpressionEvaluator* expressionEvaluator) {
+  using T = typename TypeTraits<ToKind>::NativeType;
   if (value.has_value()) {
     if constexpr (ToKind == TypeKind::VARCHAR) {
       return velox::variant(value.value());
@@ -260,19 +265,34 @@ velox::variant convertFromString(
     if constexpr (ToKind == TypeKind::VARBINARY) {
       return velox::variant::binary((value.value()));
     }
-    if (toType->isDate()) {
-      return velox::variant(util::castFromDateString(
-          StringView(value.value()), false /*isIso8601*/));
-    }
-    auto result = velox::util::Converter<ToKind>::cast(value.value());
     if constexpr (ToKind == TypeKind::TIMESTAMP) {
+      auto result = velox::util::Converter<ToKind>::cast(value.value());
       result.toGMT(Timestamp::defaultTimezone());
+      return velox::variant(result);
     }
-    return velox::variant(result);
+
+    // Prepare input row vector.
+    std::vector<VectorPtr> children = {
+        BaseVector::createConstant(VARCHAR(), value.value(), 1, pool)};
+    const auto input = std::make_shared<RowVector>(
+        pool, ROW({"c0"}, {VARCHAR()}), BufferPtr(nullptr), 1, children);
+
+    // Create cast expression to convert string to toType.
+    const core::TypedExprPtr inputField =
+        std::make_shared<const core::FieldAccessTypedExpr>(VARCHAR(), "c0");
+    const core::TypedExprPtr callExpr =
+        std::make_shared<const core::CallTypedExpr>(
+            toType, std::vector<core::TypedExprPtr>{inputField}, "cast");
+
+    const std::unique_ptr<exec::ExprSet> exprSet =
+        expressionEvaluator->compile(callExpr);
+    VectorPtr result;
+    const SelectivityVector rows(1);
+    expressionEvaluator->evaluate(exprSet.get(), rows, *input, result);
+    return result->as<ConstantVector<T>>()->value();
   }
   return velox::variant(ToKind);
 }
-
 } // namespace
 
 void SplitReader::setPartitionValue(
@@ -288,7 +308,9 @@ void SplitReader::setPartitionValue(
       convertFromString,
       it->second->dataType()->kind(),
       value,
-      it->second->dataType());
+      it->second->dataType(),
+      pool_,
+      connectorQueryCtx_->expressionEvaluator());
   setConstantValue(spec, it->second->dataType(), constValue);
 }
 
