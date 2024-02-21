@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include <re2/re2.h>
 #include <utility>
 
 #include "velox/expression/VectorFunction.h"
@@ -22,17 +23,8 @@
 namespace facebook::velox::functions::sparksql {
 namespace {
 
-/// This class only implements the basic split version in which the pattern is a
-/// single character
-class SplitCharacter final : public exec::VectorFunction {
+class Split final : public exec::VectorFunction {
  public:
-  explicit SplitCharacter(const char pattern) : pattern_{pattern} {
-    static constexpr std::string_view kRegexChars = ".$|()[{^?*+\\";
-    VELOX_CHECK(
-        kRegexChars.find(pattern) == std::string::npos,
-        "This version of split supports single-length non-regex patterns");
-  }
-
   void apply(
       const SelectivityVector& rows,
       std::vector<VectorPtr>& args,
@@ -45,23 +37,66 @@ class SplitCharacter final : public exec::VectorFunction {
     exec::VectorWriter<Array<Varchar>> resultWriter;
     resultWriter.init(*result->as<ArrayVector>());
 
-    rows.applyToSelected([&](vector_size_t row) {
-      resultWriter.setOffset(row);
-      auto& arrayWriter = resultWriter.current();
+    // Fast path for pattern and limit being constant.
+    if (args[1]->isConstantEncoding() && args[2]->isConstantEncoding()) {
+      // Adds brackets to the input pattern for sub-pattern extraction.
+      const auto pattern =
+          args[1]->asUnchecked<ConstantVector<StringView>>()->valueAt(0);
+      const auto limit =
+          args[2]->asUnchecked<ConstantVector<int32_t>>()->valueAt(0);
+      if (pattern.size() == 0) {
+        if (limit > 0) {
+          rows.applyToSelected([&](vector_size_t row) {
+            splitEmptyPattern<true>(
+                input->valueAt<StringView>(row), row, resultWriter, limit);
+          });
+        } else {
+          rows.applyToSelected([&](vector_size_t row) {
+            splitEmptyPattern<false>(
+                input->valueAt<StringView>(row), row, resultWriter);
+          });
+        }
+      } else {
+        const auto re = re2::RE2("(" + pattern.str() + ")");
+        if (limit > 0) {
+          rows.applyToSelected([&](vector_size_t row) {
+            splitAndWrite<true>(
+                input->valueAt<StringView>(row), re, row, resultWriter, limit);
+          });
+        } else {
+          rows.applyToSelected([&](vector_size_t row) {
+            splitAndWrite<false>(
+                input->valueAt<StringView>(row), re, row, resultWriter);
+          });
+        }
+      }
+    } else {
+      exec::LocalDecodedVector patterns(context, *args[1], rows);
+      exec::LocalDecodedVector limits(context, *args[2], rows);
 
-      const StringView& current = input->valueAt<StringView>(row);
-      const char* pos = current.begin();
-      const char* end = pos + current.size();
-      const char* delim;
-      do {
-        delim = std::find(pos, end, pattern_);
-        arrayWriter.add_item().setNoCopy(StringView(pos, delim - pos));
-        pos = delim + 1; // Skip past delim.
-      } while (delim != end);
-
-      resultWriter.commit();
-    });
-
+      rows.applyToSelected([&](vector_size_t row) {
+        const auto pattern = patterns->valueAt<StringView>(row);
+        const auto limit = limits->valueAt<int32_t>(row);
+        if (pattern.size() == 0) {
+          if (limit > 0) {
+            splitEmptyPattern<true>(
+                input->valueAt<StringView>(row), row, resultWriter, limit);
+          } else {
+            splitEmptyPattern<false>(
+                input->valueAt<StringView>(row), row, resultWriter);
+          }
+        } else {
+          const auto re = re2::RE2("(" + pattern.str() + ")");
+          if (limit > 0) {
+            splitAndWrite<true>(
+                input->valueAt<StringView>(row), re, row, resultWriter, limit);
+          } else {
+            splitAndWrite<false>(
+                input->valueAt<StringView>(row), re, row, resultWriter);
+          }
+        }
+      });
+    }
     resultWriter.finish();
 
     // Reference the input StringBuffers since we did not deep copy above.
@@ -72,57 +107,119 @@ class SplitCharacter final : public exec::VectorFunction {
   }
 
  private:
-  const char pattern_;
-};
+  // When pattern is empty, split each character.
+  template <bool limited>
+  void splitEmptyPattern(
+      const StringView current,
+      vector_size_t row,
+      exec::VectorWriter<Array<Varchar>>& resultWriter,
+      uint32_t limit = 0) const {
+    resultWriter.setOffset(row);
+    auto& arrayWriter = resultWriter.current();
+    if (current.size() == 0) {
+      arrayWriter.add_item().setNoCopy(StringView());
+      resultWriter.commit();
+      return;
+    }
 
-/// This class will be updated in the future as we support more variants of
-/// split
-class Split final : public exec::VectorFunction {
- public:
-  Split() {}
+    const char* const begin = current.begin();
+    const char* const end = current.end();
+    const char* pos = begin;
+    if constexpr (limited) {
+      VELOX_DCHECK_GT(limit, 0);
+      while (pos != end && pos - begin < limit - 1) {
+        arrayWriter.add_item().setNoCopy(StringView(pos, 1));
+        pos += 1;
+      }
+      if (pos < end) {
+        arrayWriter.add_item().setNoCopy(StringView(pos, end - pos));
+      }
+    } else {
+      while (pos != end) {
+        arrayWriter.add_item().setNoCopy(StringView(pos, 1));
+        pos += 1;
+      }
+    }
+    resultWriter.commit();
+  }
 
-  void apply(
-      const SelectivityVector& rows,
-      std::vector<VectorPtr>& args,
-      const TypePtr& /* outputType */,
-      exec::EvalCtx& context,
-      VectorPtr& result) const override {
-    auto delimiterVector = args[1]->as<ConstantVector<StringView>>();
-    VELOX_CHECK(
-        delimiterVector, "Split function supports only constant delimiter");
-    auto patternString = args[1]->as<ConstantVector<StringView>>()->valueAt(0);
-    VELOX_CHECK_EQ(
-        patternString.size(),
-        1,
-        "split only supports only single-character pattern");
-    char pattern = patternString.data()[0];
-    SplitCharacter splitCharacter(pattern);
-    splitCharacter.apply(rows, args, nullptr, context, result);
+  // Split with a non-empty pattern.
+  template <bool limited>
+  void splitAndWrite(
+      const StringView current,
+      const re2::RE2& re,
+      vector_size_t row,
+      exec::VectorWriter<Array<Varchar>>& resultWriter,
+      uint32_t limit = 0) const {
+    resultWriter.setOffset(row);
+    auto& arrayWriter = resultWriter.current();
+    if (current.size() == 0) {
+      arrayWriter.add_item().setNoCopy(StringView());
+      resultWriter.commit();
+      return;
+    }
+
+    const char* pos = current.begin();
+    const char* const end = current.end();
+    if constexpr (limited) {
+      VELOX_DCHECK_GT(limit, 0);
+      uint32_t numPieces = 0;
+      while (pos != end && numPieces < limit - 1) {
+        if (re2::StringPiece piece; re2::RE2::PartialMatch(
+                re2::StringPiece(pos, end - pos), re, &piece)) {
+          arrayWriter.add_item().setNoCopy(StringView(pos, piece.data() - pos));
+          numPieces += 1;
+          if (piece.end() == end) {
+            // When the found delimiter is at the end of input string, keeps
+            // one empty piece of string.
+            arrayWriter.add_item().setNoCopy(StringView());
+          }
+          pos = piece.end();
+        } else {
+          arrayWriter.add_item().setNoCopy(StringView(pos, end - pos));
+          pos = end;
+        }
+      }
+      if (pos < end) {
+        arrayWriter.add_item().setNoCopy(StringView(pos, end - pos));
+      }
+    } else {
+      while (pos != end) {
+        if (re2::StringPiece piece; re2::RE2::PartialMatch(
+                re2::StringPiece(pos, end - pos), re, &piece)) {
+          arrayWriter.add_item().setNoCopy(StringView(pos, piece.data() - pos));
+          if (piece.end() == end) {
+            arrayWriter.add_item().setNoCopy(StringView());
+          }
+          pos = piece.end();
+        } else {
+          arrayWriter.add_item().setNoCopy(StringView(pos, end - pos));
+          pos = end;
+        }
+      }
+    }
+    resultWriter.commit();
   }
 };
 
-/// The function returns specialized version of split based on the constant
-/// inputs.
-/// \param inputArgs the inputs types (VARCHAR, VARCHAR, int64) and constant
-///     values (if provided).
+/// Returns split function.
+/// @param inputArgs the inputs types (VARCHAR, VARCHAR, int32).
 std::shared_ptr<exec::VectorFunction> createSplit(
     const std::string& /*name*/,
     const std::vector<exec::VectorFunctionArg>& inputArgs,
     const core::QueryConfig& /*config*/) {
-  BaseVector* constantPattern = inputArgs[1].constantValue.get();
-
-  if (inputArgs.size() > 3 || inputArgs[0].type->isVarchar() ||
-      inputArgs[1].type->isVarchar() || (constantPattern == nullptr)) {
-    return std::make_shared<Split>();
-  }
-  auto pattern = constantPattern->as<ConstantVector<StringView>>()->valueAt(0);
-  if (pattern.size() != 1) {
-    return std::make_shared<Split>();
-  }
-  char charPattern = pattern.data()[0];
-  // TODO: Add support for zero-length pattern, 2-character pattern
-  // TODO: add support for general regex pattern using R2
-  return std::make_shared<SplitCharacter>(charPattern);
+  VELOX_USER_CHECK_EQ(
+      inputArgs.size(), 3, "Three arguments are required for split function.");
+  VELOX_USER_CHECK(
+      inputArgs[0].type->isVarchar(),
+      "The first argument should be of varchar type.");
+  VELOX_USER_CHECK(
+      inputArgs[1].type->isVarchar(),
+      "The second argument should be of varchar type.");
+  VELOX_USER_CHECK(
+      inputArgs[2].type->kind() == TypeKind::INTEGER,
+      "The third argument should be of integer type.");
+  return std::make_shared<Split>();
 }
 
 std::vector<std::shared_ptr<exec::FunctionSignature>> signatures() {
@@ -130,7 +227,8 @@ std::vector<std::shared_ptr<exec::FunctionSignature>> signatures() {
   return {exec::FunctionSignatureBuilder()
               .returnType("array(varchar)")
               .argumentType("varchar")
-              .constantArgumentType("varchar")
+              .argumentType("varchar")
+              .argumentType("integer")
               .build()};
 }
 
