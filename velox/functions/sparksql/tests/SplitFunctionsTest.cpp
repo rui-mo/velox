@@ -24,16 +24,40 @@ namespace {
 
 class SplitTest : public SparkFunctionBaseTest {
  protected:
-  void testSplitCharacter(
+  void testSplit(
       const std::vector<std::optional<std::string>>& input,
-      std::optional<char> pattern,
+      std::optional<std::string> pattern,
+      const std::vector<std::optional<std::vector<std::string>>>& output,
+      int32_t limit = -1);
+
+  void testSplitEncodings(
+      const std::vector<VectorPtr>& inputs,
       const std::vector<std::optional<std::vector<std::string>>>& output);
+
+  ArrayVectorPtr toArrayVector(
+      const std::vector<std::optional<std::vector<std::string>>>& vector);
 };
 
-void SplitTest::testSplitCharacter(
+ArrayVectorPtr SplitTest::toArrayVector(
+    const std::vector<std::optional<std::vector<std::string>>>& vector) {
+  // Creating vectors for output string vectors
+  auto sizeAt = [&vector](vector_size_t row) {
+    return vector[row] ? vector[row]->size() : 0;
+  };
+  auto valueAt = [&vector](vector_size_t row, vector_size_t idx) {
+    return vector[row] ? StringView(vector[row]->at(idx)) : StringView("");
+  };
+  auto nullAt = [&vector](vector_size_t row) {
+    return !vector[row].has_value();
+  };
+  return makeArrayVector<StringView>(vector.size(), sizeAt, valueAt, nullAt);
+}
+
+void SplitTest::testSplit(
     const std::vector<std::optional<std::string>>& input,
-    std::optional<char> pattern,
-    const std::vector<std::optional<std::vector<std::string>>>& output) {
+    std::optional<std::string> pattern,
+    const std::vector<std::optional<std::vector<std::string>>>& output,
+    int32_t limit) {
   auto valueAt = [&input](vector_size_t row) {
     return input[row] ? StringView(*input[row]) : StringView();
   };
@@ -47,34 +71,39 @@ void SplitTest::testSplitCharacter(
     auto rowVector = makeRowVector({inputString});
 
     // Evaluating the function for each input and seed
-    std::string patternString =
-        pattern.has_value() ? std::string(", '") + pattern.value() + "'" : "";
+    std::string patternString = pattern.has_value()
+        ? std::string(", '") + pattern.value() + "'"
+        : ", ''";
+    const std::string limitString =
+        ", '" + std::to_string(limit) + "'::INTEGER";
     std::string expressionString =
-        std::string("split(c0") + patternString + ")";
+        std::string("split(c0") + patternString + limitString + ")";
     return evaluate<ArrayVector>(expressionString, rowVector);
   }();
 
-  // Creating vectors for output string vectors
-  auto sizeAtOutput = [&output](vector_size_t row) {
-    return output[row] ? output[row]->size() : 0;
-  };
-  auto valueAtOutput = [&output](vector_size_t row, vector_size_t idx) {
-    return output[row] ? StringView(output[row]->at(idx)) : StringView("");
-  };
-  auto nullAtOutput = [&output](vector_size_t row) {
-    return !output[row].has_value();
-  };
-  auto expectedResult = makeArrayVector<StringView>(
-      output.size(), sizeAtOutput, valueAtOutput, nullAtOutput);
+  const auto expectedResult = toArrayVector(output);
 
   // Checking the results
   assertEqualVectors(expectedResult, result);
 }
 
+void SplitTest::testSplitEncodings(
+    const std::vector<VectorPtr>& inputs,
+    const std::vector<std::optional<std::vector<std::string>>>& output) {
+  const auto expected = toArrayVector(output);
+  std::vector<core::TypedExprPtr> inputExprs = {
+      std::make_shared<core::FieldAccessTypedExpr>(inputs[0]->type(), "c0"),
+      std::make_shared<core::FieldAccessTypedExpr>(inputs[1]->type(), "c1"),
+      std::make_shared<core::FieldAccessTypedExpr>(inputs[2]->type(), "c2")};
+  const auto expr = std::make_shared<const core::CallTypedExpr>(
+      expected->type(), std::move(inputExprs), "split");
+  testEncodings(expr, inputs, expected);
+}
+
 TEST_F(SplitTest, reallocationAndCornerCases) {
-  testSplitCharacter(
+  testSplit(
       {"boo:and:foo", "abcfd", "abcfd:", "", ":ab::cfd::::"},
-      ':',
+      ":",
       {{{"boo", "and", "foo"}},
        {{"abcfd"}},
        {{"abcfd", ""}},
@@ -83,9 +112,9 @@ TEST_F(SplitTest, reallocationAndCornerCases) {
 }
 
 TEST_F(SplitTest, nulls) {
-  testSplitCharacter(
+  testSplit(
       {std::nullopt, "abcfd", "abcfd:", std::nullopt, ":ab::cfd::::"},
-      ':',
+      ":",
       {{std::nullopt},
        {{"abcfd"}},
        {{"abcfd", ""}},
@@ -94,15 +123,97 @@ TEST_F(SplitTest, nulls) {
 }
 
 TEST_F(SplitTest, defaultArguments) {
-  testSplitCharacter(
-      {"boo:and:foo", "abcfd"}, ':', {{{"boo", "and", "foo"}}, {{"abcfd"}}});
+  testSplit(
+      {"boo:and:foo", "abcfd"}, ":", {{{"boo", "and", "foo"}}, {{"abcfd"}}});
 }
 
 TEST_F(SplitTest, longStrings) {
-  testSplitCharacter(
+  testSplit(
       {"abcdefghijklkmnopqrstuvwxyz"},
-      ',',
+      ",",
       {{{"abcdefghijklkmnopqrstuvwxyz"}}});
+}
+
+TEST_F(SplitTest, zeroLengthPattern) {
+  // Since Spark 3.4, when delimiter is empty, the result does not include an
+  // empty tail string.
+  testSplit(
+      {"abcdefg", "abc:+%/n?(^)", ""},
+      std::nullopt,
+      {{{"a", "b", "c", "d", "e", "f", "g"}},
+       {{"a", "b", "c", ":", "+", "%", "/", "n", "?", "(", "^", ")"}},
+       {{""}}});
+  testSplit(
+      {"abcdefg", "abc:+%/n?(^)", ""},
+      std::nullopt,
+      {{{"a", "b", "cdefg"}}, {{"a", "b", "c:+%/n?(^)"}}, {{""}}},
+      3);
+  testSplit(
+      {"abcdefg", "abc:+%/n?(^)", ""},
+      std::nullopt,
+      {{{"a", "b", "c", "d", "e", "f", "g"}},
+       {{"a", "b", "c", ":", "+", "%", "/", "n", "?", "(", "^", ")"}},
+       {{""}}},
+      20);
+}
+
+TEST_F(SplitTest, encodings) {
+  auto strings = makeFlatVector<StringView>(
+      {"abcdef",
+       "oneAtwoBthreeC",
+       "aa2bb3cc",
+       "hello",
+       "aacbbcddc",
+       "morning",
+       "",
+       "",
+       "today",
+       "tomorrow"});
+  auto patterns = makeFlatVector<StringView>(
+      {"",
+       "[ABC]",
+       "[1-9]+",
+       "e.*o",
+       "c",
+       "(mo)|ni",
+       ":",
+       "",
+       ".",
+       "tomorrow"});
+  auto limits = makeFlatVector<int32_t>({0, -1, -1, 0, -1, -2, -1, -4, -1, -1});
+  std::vector<std::optional<std::vector<std::string>>> expected = {
+      {{"a", "b", "c", "d", "e", "f"}},
+      {{"one", "two", "three", ""}},
+      {{"aa", "bb", "cc"}},
+      {{"h", ""}},
+      {{"aa", "bb", "dd", ""}},
+      {{"", "r", "ng"}},
+      {{""}},
+      {{""}},
+      {{
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+      }},
+      {{"", ""}}};
+  testSplitEncodings({strings, patterns, limits}, expected);
+
+  limits = makeFlatVector<int32_t>({3, 3, 2, 1, 5, 2, 1, 1, 2, 2});
+  expected = {
+      {{"a", "b", "cdef"}},
+      {{"one", "two", "threeC"}},
+      {{"aa", "bb3cc"}},
+      {{"hello"}},
+      {{"aa", "bb", "dd", ""}},
+      {{"", "rning"}},
+      {{""}},
+      {{""}},
+      {{"", "oday"}},
+      {{"", ""}}};
+  testSplitEncodings({strings, patterns, limits}, expected);
 }
 
 } // namespace
