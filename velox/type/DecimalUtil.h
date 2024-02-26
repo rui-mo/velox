@@ -237,7 +237,7 @@ class DecimalUtil {
         static_cast<uint128_t>(value > 0 ? value : -value);
     const auto integralDigits =
         integralValue == 0 ? 0 : countDigits(integralValue);
-    const auto fractionDigits = digits - integralDigits;
+    const auto fractionDigits = std::max(digits - integralDigits, 0);
     /// Scales up the input value to keep all the precise fractional digits
     /// before rounding. Convert value to long double type, as double * int128_t
     /// returns int128_t and fractional digits are lost. No need to consider
