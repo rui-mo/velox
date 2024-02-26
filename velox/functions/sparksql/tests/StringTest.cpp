@@ -741,6 +741,37 @@ TEST_F(StringTest, substring) {
   EXPECT_EQ(substringWithLength("da\u6570\u636Eta", -3, 2), "\u636Et");
 }
 
+TEST_F(StringTest, locate) {
+  const auto locate = [&](const std::optional<std::string>& substr,
+                          const std::optional<std::string>& str,
+                          const std::optional<int32_t>& start = std::nullopt,
+                          bool needStart = false) {
+    if (!start.has_value() && !needStart) {
+      return evaluateOnce<int32_t>("locate(c0, c1)", substr, str);
+    }
+    return evaluateOnce<int32_t>("locate(c0, c1, c2)", substr, str, start);
+  };
+
+  EXPECT_EQ(locate("aa", "aaads"), 1);
+  EXPECT_EQ(locate("aa", "aaads", 0), 0);
+  EXPECT_EQ(locate("aa", "aaads", 2), 2);
+  EXPECT_EQ(locate("aa", "aaads", 3), 0);
+  EXPECT_EQ(locate("aa", "aaads", -3), 0);
+  EXPECT_EQ(locate("de", "aaads"), 0);
+  EXPECT_EQ(locate("de", "aaads", 2), 0);
+  EXPECT_EQ(locate("", ""), 1);
+  EXPECT_EQ(locate("", "", 3), 1);
+  EXPECT_EQ(locate("", "aaads"), 1);
+  EXPECT_EQ(locate("", "aaads", 9), 1);
+  EXPECT_EQ(locate("aa", ""), 0);
+  EXPECT_EQ(locate("aa", "", 2), 0);
+  EXPECT_EQ(locate("zz", "aaads", std::nullopt, true), 0);
+  EXPECT_EQ(locate("aa", std::nullopt), std::nullopt);
+  EXPECT_EQ(locate(std::nullopt, "aaads"), std::nullopt);
+  EXPECT_EQ(locate(std::nullopt, std::nullopt, -1), std::nullopt);
+  EXPECT_EQ(locate(std::nullopt, std::nullopt, std::nullopt, true), 0);
+}
+
 TEST_F(StringTest, substringIndex) {
   const auto substringIndex =
       [&](const std::string& str, const std::string& delim, int32_t count) {
