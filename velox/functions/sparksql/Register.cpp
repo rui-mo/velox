@@ -18,6 +18,7 @@
 #include "velox/expression/RegisterSpecialForm.h"
 #include "velox/expression/RowConstructor.h"
 #include "velox/expression/SpecialFormRegistry.h"
+#include "velox/functions/lib/ArrayUnionFunction.h"
 #include "velox/functions/lib/IsNull.h"
 #include "velox/functions/lib/Re2Functions.h"
 #include "velox/functions/lib/RegistrationHelpers.h"
@@ -27,7 +28,6 @@
 #include "velox/functions/prestosql/StringFunctions.h"
 #include "velox/functions/sparksql/ArrayMinMaxFunction.h"
 #include "velox/functions/sparksql/ArraySort.h"
-#include "velox/functions/sparksql/ArrayUnionFunction.h"
 #include "velox/functions/sparksql/Bitwise.h"
 #include "velox/functions/sparksql/DateTimeFunctions.h"
 #include "velox/functions/sparksql/Hash.h"
@@ -122,7 +122,7 @@ inline void registerArrayMinMaxFunctions(const std::string& prefix) {
 
 template <typename T>
 inline void registerArrayUnionFunctions(const std::string& prefix) {
-  registerFunction<sparksql::ArrayUnionFunction, Array<T>, Array<T>, Array<T>>(
+  registerFunction<ArrayUnionFunctionNaNEqual, Array<T>, Array<T>, Array<T>>(
       {prefix + "array_union"});
 }
 

@@ -16,15 +16,18 @@
 
 #pragma once
 
-namespace facebook::velox::functions::sparksql {
+#include "velox/functions/Udf.h"
 
+namespace facebook::velox::functions {
+namespace {
 /// This class implements the array union function.
 ///
 /// DEFINITION:
 /// array_union(x, y) → array
 /// Returns an array of the elements in the union of x and y, without
 /// duplicates.
-template <typename T>
+/// @tparam equalNaN: If true, NaNs are considered equal.
+template <typename T, bool equalNaN>
 struct ArrayUnionFunction {
   VELOX_DEFINE_FUNCTION_TYPES(T)
 
@@ -34,20 +37,18 @@ struct ArrayUnionFunction {
     folly::F14FastSet<typename In::element_t> elementSet;
     bool nullAdded = false;
     bool nanAdded = false;
+    constexpr bool isFloating = std::is_same_v<In, arg_type<Array<float>>> ||
+        std::is_same_v<In, arg_type<Array<double>>>;
     auto addItems = [&](auto& inputArray) {
       for (const auto& item : inputArray) {
         if (item.has_value()) {
-          if constexpr (
-              std::is_same_v<In, arg_type<Array<float>>> ||
-              std::is_same_v<In, arg_type<Array<double>>>) {
+          if constexpr (isFloating && equalNaN) {
             bool isNaN = std::isnan(item.value());
             if ((isNaN && !nanAdded) ||
                 (!isNaN && elementSet.insert(item.value()).second)) {
               auto& newItem = out.add_item();
               newItem = item.value();
-            }
-            if (!nanAdded && isNaN) {
-              nanAdded = true;
+              nanAdded = isNaN;
             }
           } else if (elementSet.insert(item.value()).second) {
             auto& newItem = out.add_item();
@@ -86,4 +87,11 @@ struct ArrayUnionFunction {
     addItems(inputArray2);
   }
 };
-} // namespace facebook::velox::functions::sparksql
+} // namespace
+
+template <typename T>
+struct ArrayUnionFunctionNaNEqual : public ArrayUnionFunction<T, true> {};
+
+template <typename T>
+struct ArrayUnionFunctionGeneral : public ArrayUnionFunction<T, false> {};
+} // namespace facebook::velox::functions
