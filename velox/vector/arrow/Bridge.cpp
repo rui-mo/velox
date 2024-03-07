@@ -1420,6 +1420,28 @@ VectorPtr createTimestampVector(
       optionalNullCount(nullCount));
 }
 
+VectorPtr createShortDecimalVector(
+    memory::MemoryPool* pool,
+    const TypePtr& type,
+    BufferPtr nulls,
+    const int128_t* input,
+    size_t length,
+    int64_t nullCount) {
+  auto values = AlignedBuffer::allocate<int64_t>(length, pool);
+  auto rawValues = values->asMutable<int64_t>();
+  for (size_t i = 0; i < length; ++i) {
+    memcpy(rawValues + i, input + i, sizeof(int64_t));
+  }
+
+  return createFlatVector<TypeKind::BIGINT>(
+      pool,
+      type,
+      nulls,
+      length,
+      values,
+      nullCount);
+}
+
 bool isREE(const ArrowSchema& arrowSchema) {
   return arrowSchema.format[0] == '+' && arrowSchema.format[1] == 'r';
 }
@@ -1496,6 +1518,14 @@ VectorPtr importFromArrowImpl(
         type,
         nulls,
         static_cast<const int64_t*>(arrowArray.buffers[1]),
+        arrowArray.length,
+        arrowArray.null_count);
+  } else if (type->isShortDecimal()) {
+    return createShortDecimalVector(
+        pool,
+        type,
+        nulls,
+        static_cast<const int128_t*>(arrowArray.buffers[1]),
         arrowArray.length,
         arrowArray.null_count);
   } else if (type->isRow()) {

@@ -1102,6 +1102,21 @@ class ArrowBridgeArrayImportTest : public ArrowBridgeArrayExportTest {
     }
   }
 
+  void testShortDecimalImport() {
+    auto arrowSchema = makeArrowSchema("d:5,2");
+    ArrowContextHolder holder;
+    auto arrowArray = fillArrowArray(
+        std::vector<std::optional<int128_t>>{
+            1, -1, 0, 12345, -12345, std::nullopt},
+        holder);
+    auto output = importFromArrow(arrowSchema, arrowArray, pool_.get());
+    assertVectorContent(
+        std::vector<std::optional<int64_t>>{
+            1, -1, 0, 12345, -12345, std::nullopt},
+        output,
+        1);
+  }
+
   void testImportScalar() {
     testArrowImport<bool>("b", {});
     testArrowImport<bool>("b", {true});
@@ -1133,6 +1148,8 @@ class ArrowBridgeArrayImportTest : public ArrowBridgeArrayExportTest {
 
     testArrowImport<Timestamp>(
         "ttn", {Timestamp(0, 0), std::nullopt, Timestamp(1699308257, 1234)});
+
+    testShortDecimalImport();
   }
 
   template <typename TOutput, typename TInput>
