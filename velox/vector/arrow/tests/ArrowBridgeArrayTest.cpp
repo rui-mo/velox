@@ -1045,21 +1045,27 @@ class ArrowBridgeArrayImportTest : public ArrowBridgeArrayExportTest {
   // Takes a vector with input data, generates an input ArrowArray and Velox
   // Vector (using vector maker). Then converts ArrowArray into Velox vector and
   // assert that both Velox vectors are semantically the same.
-  template <typename T>
+  template <typename TOutput, typename TInput = TOutput>
   void testArrowImport(
       const char* format,
-      const std::vector<std::optional<T>>& inputValues) {
+      const std::vector<std::optional<TInput>>& inputValues) {
     ArrowContextHolder holder;
     auto arrowArray = fillArrowArray(inputValues, holder);
 
     auto arrowSchema = makeArrowSchema(format);
     auto output = importFromArrow(arrowSchema, arrowArray, pool_.get());
-    assertVectorContent(inputValues, output, arrowArray.null_count);
+    if constexpr (
+        std::is_same_v<TInput, int128_t> && std::is_same_v<TOutput, int64_t>) {
+      assertShortDecimalVectorContent(
+          inputValues, output, arrowArray.null_count);
+    } else {
+      assertVectorContent(inputValues, output, arrowArray.null_count);
+    }
 
     // Buffer views are not reusable. Strings might need to create an additional
     // buffer, depending on the string sizes, in which case the buffers could be
     // reusable. So we don't check them in here.
-    if constexpr (!std::is_same_v<T, std::string>) {
+    if constexpr (!std::is_same_v<TInput, std::string>) {
       EXPECT_FALSE(BaseVector::isVectorWritable(output));
     } else {
       size_t totalLength = 0;
@@ -1149,7 +1155,8 @@ class ArrowBridgeArrayImportTest : public ArrowBridgeArrayExportTest {
     testArrowImport<Timestamp>(
         "ttn", {Timestamp(0, 0), std::nullopt, Timestamp(1699308257, 1234)});
 
-    testShortDecimalImport();
+    testArrowImport<int64_t, int128_t>(
+        "d:5,2", {1, -1, 0, 12345, -12345, std::nullopt});
   }
 
   template <typename TOutput, typename TInput>
@@ -1229,6 +1236,22 @@ class ArrowBridgeArrayImportTest : public ArrowBridgeArrayExportTest {
   }
 
  private:
+  void assertShortDecimalVectorContent(
+      const std::vector<std::optional<int128_t>>& expectedValues,
+      const VectorPtr& actual,
+      size_t nullCount) {
+    std::vector<std::optional<int64_t>> decValues;
+    decValues.reserve(expectedValues.size());
+    for (const auto value : expectedValues) {
+      if (value.has_value()) {
+        decValues.emplace_back(static_cast<int64_t>(value.value()));
+      } else {
+        decValues.emplace_back(std::nullopt);
+      }
+    }
+    assertVectorContent(decValues, actual, nullCount);
+  }
+
   // Creates timestamp from bigint and asserts the content of actual vector with
   // the expected timestamp values.
   void assertTimestampVectorContent(
