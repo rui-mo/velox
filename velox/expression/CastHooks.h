@@ -28,6 +28,8 @@ class CastHooks {
  public:
   virtual ~CastHooks() = default;
 
+  virtual Timestamp castBigintToTimestamp(int64_t value) const = 0;
+
   virtual Timestamp castStringToTimestamp(const StringView& view) const = 0;
 
   virtual int32_t castStringToDate(const StringView& dateString) const = 0;

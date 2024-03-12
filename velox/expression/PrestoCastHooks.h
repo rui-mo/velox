@@ -27,6 +27,8 @@ class PrestoCastHooks : public CastHooks {
   explicit PrestoCastHooks(const core::QueryConfig& config)
       : CastHooks(), legacyCast_(config.isLegacyCast()) {}
 
+  Timestamp castBigintToTimestamp(int64_t value) const override;
+
   // Uses the default implementation of 'castFromDateString'.
   Timestamp castStringToTimestamp(const StringView& view) const override;
 

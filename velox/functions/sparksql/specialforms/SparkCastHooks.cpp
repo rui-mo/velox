@@ -19,6 +19,17 @@
 
 namespace facebook::velox::functions::sparksql {
 
+Timestamp SparkCastHooks::castBigintToTimestamp(int64_t value) const {
+  int64_t result;
+  bool overflow =
+      __builtin_mul_overflow(value, Timestamp::kMicrosecondsInSecond, &result);
+  if (overflow) {
+    result = value < 0 ? std::numeric_limits<int64_t>::min()
+                       : std::numeric_limits<int64_t>::max();
+  }
+  return Timestamp::fromMicros(result);
+}
+
 Timestamp SparkCastHooks::castStringToTimestamp(const StringView& view) const {
   return util::fromTimestampString(view.data(), view.size());
 }

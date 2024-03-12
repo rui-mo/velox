@@ -18,6 +18,10 @@
 
 namespace facebook::velox::exec {
 
+Timestamp PrestoCastHooks::castBigintToTimestamp(int64_t value) const {
+  VELOX_UNSUPPORTED();
+}
+
 Timestamp PrestoCastHooks::castStringToTimestamp(const StringView& view) const {
   return util::fromTimestampString(view.data(), view.size());
 }

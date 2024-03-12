@@ -247,6 +247,36 @@ VectorPtr CastExpr::castToDate(
   }
 }
 
+template <TypeKind FromKind>
+VectorPtr CastExpr::applyFixedWidthToTimestampCast(
+    const SelectivityVector& rows,
+    const BaseVector& input,
+    exec::EvalCtx& context,
+    const TypePtr& fromType) {
+  using From = typename TypeTraits<FromKind>::NativeType;
+  VectorPtr castResult;
+  context.ensureWritable(rows, TIMESTAMP(), castResult);
+  (*castResult).clearNulls(rows);
+  auto* resultFlatVector = castResult->as<FlatVector<int64_t>>();
+
+  switch (fromType->kind()) {
+    case TypeKind::TINYINT:
+    case TypeKind::SMALLINT:
+    case TypeKind::INTEGER:
+    case TypeKind::BIGINT: {
+      auto* inputVector = input.as<SimpleVector<From>>();
+      applyToSelectedNoThrowLocal(context, rows, castResult, [&](auto row) {
+        resultFlatVector->set(
+            row, hooks_->castBigintToTimestamp(inputVector->valueAt(row)));
+      });
+      return castResult;
+    }
+    default:
+      VELOX_UNSUPPORTED(
+          "Cast from {} to TIMESTAMP is not supported", fromType->toString());
+  }
+}
+
 namespace {
 void propagateErrorsOrSetNulls(
     bool setNullInResultAtError,
@@ -677,6 +707,9 @@ void CastExpr::applyPeeled(
     result = castFromDate(rows, input, context, toType);
   } else if (toType->isDate()) {
     result = castToDate(rows, input, context, fromType);
+  } else if (
+      toType->kind() == TypeKind::TIMESTAMP && fromType->isFixedWidth()) {
+    result = applyFixedWidthToTimestampCast(rows, input, context, fromType);
   } else if (toType->isShortDecimal()) {
     result = applyDecimal<int64_t>(rows, input, context, fromType, toType);
   } else if (toType->isLongDecimal()) {

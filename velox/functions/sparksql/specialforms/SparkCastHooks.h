@@ -23,6 +23,8 @@ namespace facebook::velox::functions::sparksql {
 // This class provides cast hooks following Spark semantics.
 class SparkCastHooks : public exec::CastHooks {
  public:
+  Timestamp castBigintToTimestamp(int64_t value) const override;
+  
   // TODO: Spark hook allows more string patterns than Presto.
   Timestamp castStringToTimestamp(const StringView& view) const override;
 
