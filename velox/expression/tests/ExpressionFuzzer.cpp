@@ -27,7 +27,6 @@
 #include "velox/expression/ReverseSignatureBinder.h"
 #include "velox/expression/SimpleFunctionRegistry.h"
 #include "velox/expression/tests/ExpressionFuzzer.h"
-#include "velox/expression/tests/utils/ArgumentTypeFuzzer.h"
 
 namespace facebook::velox::test {
 
@@ -1011,7 +1010,7 @@ ExpressionFuzzer::FuzzedExpressionData ExpressionFuzzer::fuzzExpressions(
 
   std::vector<core::TypedExprPtr> expressions;
   for (int i = 0; i < outType->size(); i++) {
-    expressions.push_back(generateExpression(outType->childAt(i)));
+    expressions.push_back(generateExpression(outType->childAt(i), i));
   }
   return {
       std::move(expressions),
@@ -1032,7 +1031,8 @@ ExpressionFuzzer::FuzzedExpressionData ExpressionFuzzer::fuzzExpression() {
 // generated expressions of the same return type exist then there is a 30%
 // chance that it will re-use one of them.
 core::TypedExprPtr ExpressionFuzzer::generateExpression(
-    const TypePtr& returnType) {
+    const TypePtr& returnType,
+    column_index_t index) {
   VELOX_CHECK_GT(state.remainingLevelOfNesting_, 0);
   --state.remainingLevelOfNesting_;
   auto guard = folly::makeGuard([&] { ++state.remainingLevelOfNesting_; });
@@ -1082,7 +1082,7 @@ core::TypedExprPtr ExpressionFuzzer::generateExpression(
       if (!expression &&
           (options_.enableComplexTypes || options_.enableDecimalType)) {
         expression = generateExpressionFromSignatureTemplate(
-            returnType, chosenFunctionName);
+            returnType, chosenFunctionName, index);
       }
     }
   }
@@ -1260,7 +1260,8 @@ const SignatureTemplate* ExpressionFuzzer::findSignatureTemplate(
 
 core::TypedExprPtr ExpressionFuzzer::generateExpressionFromSignatureTemplate(
     const TypePtr& returnType,
-    const std::string& functionName) {
+    const std::string& functionName,
+    column_index_t index) {
   auto typeName = typeToBaseName(returnType);
 
   auto* chosen =
@@ -1274,10 +1275,37 @@ core::TypedExprPtr ExpressionFuzzer::generateExpressionFromSignatureTemplate(
   }
 
   auto chosenSignature = *chosen->signature;
+  auto constantArguments = chosenSignature.constantArguments();
+
+  if (indexToArgumentFuzzers_.count(index)) {
+    const auto fuzzer = indexToArgumentFuzzers_[index];
+    VELOX_CHECK_EQ(fuzzer->fuzzArgumentTypes(options_.maxNumVarArgs), true);
+    auto& argumentTypes = fuzzer->argumentTypes();
+
+    // ArgumentFuzzer may generate duplicate arguments if the signature's
+    // variableArity is true, so we need to pad duplicate constant flags.
+    if (!constantArguments.empty()) {
+      auto repeat = argumentTypes.size() - constantArguments.size();
+      auto lastConstant = constantArguments.back();
+      for (int i = 0; i < repeat; ++i) {
+        constantArguments.push_back(lastConstant);
+      }
+    }
+
+    CallableSignature callable{
+        .name = chosen->name,
+        .args = argumentTypes,
+        .variableArity = false,
+        .returnType = returnType,
+        .constantArgs = constantArguments};
+
+    markSelected(chosen->name);
+    return getCallExprFromCallable(callable, returnType);
+  }
+
   ArgumentTypeFuzzer fuzzer{chosenSignature, returnType, rng_};
   VELOX_CHECK_EQ(fuzzer.fuzzArgumentTypes(options_.maxNumVarArgs), true);
   auto& argumentTypes = fuzzer.argumentTypes();
-  auto constantArguments = chosenSignature.constantArguments();
 
   // ArgumentFuzzer may generate duplicate arguments if the signature's
   // variableArity is true, so we need to pad duplicate constant flags.
@@ -1396,7 +1424,7 @@ core::TypedExprPtr ExpressionFuzzer::ExprBank::getRandomExpression(
   return nullptr;
 }
 
-TypePtr ExpressionFuzzer::fuzzReturnType() {
+TypePtr ExpressionFuzzer::fuzzReturnType(column_index_t index) {
   auto chooseFromConcreteSignatures = rand32(0, 1);
 
   chooseFromConcreteSignatures =
@@ -1420,8 +1448,12 @@ TypePtr ExpressionFuzzer::fuzzReturnType() {
     VELOX_CHECK(
         !signatureTemplates_.empty(), "No function signature available.");
     size_t idx = rand32(0, signatureTemplates_.size() - 1);
-    ArgumentTypeFuzzer typeFuzzer{*signatureTemplates_[idx].signature, rng_};
-    rootType = typeFuzzer.fuzzReturnType();
+    const auto typeFuzzer = std::make_shared<ArgumentTypeFuzzer>(
+        *signatureTemplates_[idx].signature, rng_);
+    rootType = typeFuzzer->fuzzReturnType();
+    if (indexToArgumentFuzzers_.count(index) == 0) {
+      indexToArgumentFuzzers_[index] = typeFuzzer;
+    }
   }
   return rootType;
 }
@@ -1430,7 +1462,7 @@ RowTypePtr ExpressionFuzzer::fuzzRowReturnType(size_t size, char prefix) {
   std::vector<TypePtr> children;
   std::vector<std::string> names;
   for (int i = 0; i < size; i++) {
-    children.push_back(fuzzReturnType());
+    children.push_back(fuzzReturnType(i));
     names.push_back(fmt::format("{}{}", prefix, i));
   }
   return ROW(std::move(names), std::move(children));

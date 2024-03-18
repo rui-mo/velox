@@ -20,6 +20,7 @@
 #include "velox/core/QueryCtx.h"
 #include "velox/expression/Expr.h"
 #include "velox/expression/tests/ExpressionVerifier.h"
+#include "velox/expression/tests/utils/ArgumentTypeFuzzer.h"
 #include "velox/expression/tests/utils/FuzzerToolkit.h"
 #include "velox/functions/FunctionRegistry.h"
 #include "velox/vector/fuzzer/VectorFuzzer.h"
@@ -191,7 +192,7 @@ class ExpressionFuzzer {
   }
 
   // Generate a random return type.
-  TypePtr fuzzReturnType();
+  TypePtr fuzzReturnType(column_index_t index = 0);
 
   RowTypePtr fuzzRowReturnType(size_t size, char prefix = 'p');
 
@@ -199,7 +200,9 @@ class ExpressionFuzzer {
   // Either generates a new expression of the required return type or if
   // already generated expressions of the same return type exist then there is
   // a 30% chance that it will re-use one of them.
-  core::TypedExprPtr generateExpression(const TypePtr& type);
+  core::TypedExprPtr generateExpression(
+      const TypePtr& type,
+      column_index_t index = 0);
 
   enum ArgumentKind { kArgConstant = 0, kArgColumn = 1, kArgExpression = 2 };
 
@@ -317,7 +320,8 @@ class ExpressionFuzzer {
   /// the function named 'functionName' supports.
   core::TypedExprPtr generateExpressionFromSignatureTemplate(
       const TypePtr& returnType,
-      const std::string& functionName);
+      const std::string& functionName,
+      column_index_t index);
 
   /// Generate a cast expression that returns the specified type. Return a
   /// nullptr if casting to the specified type is not supported. The supported
@@ -390,6 +394,9 @@ class ExpressionFuzzer {
       const CallableSignature& input)>;
 
   std::unordered_map<std::string, ArgsOverrideFunc> funcArgOverrides_;
+
+  std::unordered_map<column_index_t, std::shared_ptr<ArgumentTypeFuzzer>>
+      indexToArgumentFuzzers_;
 
   std::shared_ptr<VectorFuzzer> vectorFuzzer_;
 

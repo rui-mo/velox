@@ -263,7 +263,8 @@ TEST_F(ArgumentTypeFuzzerTest, decimal) {
 
   testFuzzingDecimalSuccess(signature, BOOLEAN(), 3);
 
-  signature = exec::FunctionSignatureBuilder()
+  signature =
+      exec::FunctionSignatureBuilder()
           .integerVariable("a_precision")
           .integerVariable("a_scale")
           .integerVariable("b_precision")
