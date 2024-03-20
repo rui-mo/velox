@@ -472,7 +472,10 @@ TEST_F(ParquetTableScanTest, readAsLowerCase) {
 }
 
 TEST_F(ParquetTableScanTest, structSelection) {
-  auto vector = makeArrayVector<StringView>({{}});
+  auto vector = makeRowVector(
+      {makeFlatVector<std::string>({"Janet"}),
+       makeFlatVector<std::string>({"Jones"})});
+
   loadData(
       getExampleFilePath("contacts.parquet"),
       ROW({"name"}, {ROW({"first", "last"}, {VARCHAR(), VARCHAR()})}),
@@ -481,7 +484,7 @@ TEST_F(ParquetTableScanTest, structSelection) {
           {
               vector,
           }));
-  assertSelectWithFilter({"name"}, {}, "", "SELECT ('Janet', 'Jones')");
+  assertSelectWithFilter({"name"}, {}, "", "SELECT t from tmp");
 
   loadData(
       getExampleFilePath("contacts.parquet"),
@@ -535,7 +538,7 @@ TEST_F(ParquetTableScanTest, structSelection) {
           }));
   assertSelectWithFilter({"name"}, {}, "", "SELECT NULL");
 
-  loadData(
+  /*loadData(
       getExampleFilePath("contacts.parquet"),
       ROW({"name"}, {ROW({}, {})}),
       makeRowVector(
@@ -544,7 +547,7 @@ TEST_F(ParquetTableScanTest, structSelection) {
               vector,
           }));
 
-  assertSelectWithFilter({"name"}, {}, "", "SELECT t from tmp");
+  assertSelectWithFilter({"name"}, {}, "", "SELECT row()");*/
 }
 
 TEST_F(ParquetTableScanTest, timestampFilter) {

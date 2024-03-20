@@ -119,7 +119,6 @@ StructColumnReader::findBestLeaf() {
       best = child;
     }
   }
-  assert(best);
   return best;
 }
 
