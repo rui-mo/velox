@@ -32,7 +32,9 @@ TEST_F(JsonTypeTest, basic) {
   ASSERT_EQ(JSON()->toString(), "JSON");
 
   ASSERT_TRUE(hasType("JSON"));
-  ASSERT_EQ(*getType("JSON", {}), *JSON());
+  TypePtr type;
+  getType("JSON", {}, type);
+  ASSERT_EQ(*type, *JSON());
 }
 
 TEST_F(JsonTypeTest, serde) {

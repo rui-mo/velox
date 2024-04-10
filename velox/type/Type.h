@@ -32,6 +32,7 @@
 #include <vector>
 
 #include "velox/common/base/ClassName.h"
+#include "velox/common/base/Status.h"
 #include "velox/common/serialization/Serializable.h"
 #include "velox/type/HugeInt.h"
 #include "velox/type/StringView.h"
@@ -1681,11 +1682,13 @@ std::shared_ptr<const Type> createType(
 /// Returns true built-in or custom type with specified name exists.
 bool hasType(const std::string& name);
 
-/// Returns built-in or custom type with specified name and child types.
-/// Returns nullptr if type with specified name doesn't exist.
-TypePtr getType(
+/// Sets the type as built-in or custom type with specified name and child
+/// types. Sets the type as nullptr if type with specified name doesn't exist.
+/// Returns error status if exception happens.
+Status getType(
     const std::string& name,
-    const std::vector<TypeParameter>& parameters);
+    const std::vector<TypeParameter>& parameters,
+    TypePtr& type);
 
 template <TypeKind KIND>
 std::shared_ptr<const Type> createType(

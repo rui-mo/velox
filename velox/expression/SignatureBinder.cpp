@@ -270,12 +270,12 @@ TypePtr SignatureBinder::tryResolveType(
     typeParameters.push_back(TypeParameter(type));
   }
 
-  try {
-    if (auto type = getType(typeName, typeParameters)) {
-      return type;
-    }
-  } catch (const std::exception&) {
-    // TODO Perhaps, modify getType to add suppress-errors flag.
+  TypePtr type;
+  auto status = getType(typeName, typeParameters, type);
+  if (type) {
+    return type;
+  }
+  if (!status.ok()) {
     return nullptr;
   }
 

@@ -32,7 +32,9 @@ TEST_F(HyperLogLogTypeTest, basic) {
   ASSERT_EQ(HYPERLOGLOG()->toString(), "HYPERLOGLOG");
 
   ASSERT_TRUE(hasType("HYPERLOGLOG"));
-  ASSERT_EQ(*getType("HYPERLOGLOG", {}), *HYPERLOGLOG());
+  TypePtr type;
+  getType("HYPERLOGLOG", {}, type);
+  ASSERT_EQ(*type, *HYPERLOGLOG());
 }
 
 TEST_F(HyperLogLogTypeTest, serde) {

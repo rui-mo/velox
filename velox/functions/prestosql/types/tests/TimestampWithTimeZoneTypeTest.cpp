@@ -33,8 +33,10 @@ TEST_F(TimestampWithTimeZoneTypeTest, basic) {
   ASSERT_EQ(TIMESTAMP_WITH_TIME_ZONE()->toString(), "TIMESTAMP WITH TIME ZONE");
 
   ASSERT_TRUE(hasType("TIMESTAMP WITH TIME ZONE"));
+  TypePtr type;
+  getType("TIMESTAMP WITH TIME ZONE", {}, type);
   ASSERT_EQ(
-      *getType("TIMESTAMP WITH TIME ZONE", {}), *TIMESTAMP_WITH_TIME_ZONE());
+      *type, *TIMESTAMP_WITH_TIME_ZONE());
 }
 
 TEST_F(TimestampWithTimeZoneTypeTest, serde) {

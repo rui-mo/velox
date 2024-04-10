@@ -29,10 +29,14 @@ TypePtr typeFromString(
   } else if (upper == "DOUBLE PRECISION") {
     upper = "DOUBLE";
   }
-  auto inferredType = getType(upper, {});
+  TypePtr inferredType;
+  const auto status = getType(upper, {}, inferredType);
   if (failIfNotRegistered) {
     VELOX_CHECK(
-        inferredType, "Failed to parse type [{}]. Type not registered.", type);
+        inferredType && status.ok(),
+        "Failed to parse type [{}] due to {}. Type not registered.",
+        type,
+        status.message());
   }
   return inferredType;
 }

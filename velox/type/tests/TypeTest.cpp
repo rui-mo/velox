@@ -71,8 +71,9 @@ TEST(TypeTest, array) {
   EXPECT_TRUE(arrayType->parameters()[0].kind == TypeParameterKind::kType);
   EXPECT_EQ(*arrayType->parameters()[0].type, *arrayType->childAt(0));
 
-  EXPECT_EQ(
-      *arrayType, *getType("ARRAY", {TypeParameter(ARRAY(ARRAY(INTEGER())))}));
+  TypePtr type;
+  getType("ARRAY", {TypeParameter(ARRAY(ARRAY(INTEGER())))}, type);
+  EXPECT_EQ(*arrayType, *type);
 
   testTypeSerde(arrayType);
 }
@@ -90,7 +91,9 @@ TEST(TypeTest, integer) {
 }
 
 TEST(TypeTest, hugeint) {
-  EXPECT_EQ(getType("HUGEINT", {}), HUGEINT());
+  TypePtr type;
+  getType("HUGEINT", {}, type);
+  EXPECT_EQ(type, HUGEINT());
 }
 
 TEST(TypeTest, timestamp) {
@@ -240,14 +243,15 @@ TEST(TypeTest, shortDecimal) {
       shortDecimal->parameters()[1].kind == TypeParameterKind::kLongLiteral);
   EXPECT_EQ(shortDecimal->parameters()[1].longLiteral.value(), 5);
 
-  EXPECT_EQ(
-      *shortDecimal,
-      *getType(
-          "DECIMAL",
-          {
-              TypeParameter(10),
-              TypeParameter(5),
-          }));
+  TypePtr type;
+  getType(
+      "DECIMAL",
+      {
+          TypeParameter(10),
+          TypeParameter(5),
+      },
+      type);
+  EXPECT_EQ(*shortDecimal, *type);
 
   testTypeSerde(shortDecimal);
 }
@@ -276,14 +280,15 @@ TEST(TypeTest, longDecimal) {
       longDecimal->parameters()[1].kind == TypeParameterKind::kLongLiteral);
   EXPECT_EQ(longDecimal->parameters()[1].longLiteral.value(), 5);
 
-  EXPECT_EQ(
-      *longDecimal,
-      *getType(
-          "DECIMAL",
-          {
-              TypeParameter(30),
-              TypeParameter(5),
-          }));
+  TypePtr type;
+  getType(
+      "DECIMAL",
+      {
+          TypeParameter(30),
+          TypeParameter(5),
+      },
+      type);
+  EXPECT_EQ(*longDecimal, *type);
 
   testTypeSerde(longDecimal);
 }
@@ -375,14 +380,15 @@ TEST(TypeTest, map) {
     EXPECT_EQ(*mapType->parameters()[i].type, *mapType->childAt(i));
   }
 
-  EXPECT_EQ(
-      *mapType,
-      *getType(
-          "MAP",
-          {
-              TypeParameter(INTEGER()),
-              TypeParameter(ARRAY(BIGINT())),
-          }));
+  TypePtr type;
+  getType(
+      "MAP",
+      {
+          TypeParameter(INTEGER()),
+          TypeParameter(ARRAY(BIGINT())),
+      },
+      type);
+  EXPECT_EQ(*mapType, *type);
 
   testTypeSerde(mapType);
 }
@@ -756,15 +762,16 @@ TEST(TypeTest, function) {
     EXPECT_EQ(*type->parameters()[i].type, *type->childAt(i));
   }
 
-  EXPECT_EQ(
-      *type,
-      *getType(
-          "FUNCTION",
-          {
-              TypeParameter(BIGINT()),
-              TypeParameter(VARCHAR()),
-              TypeParameter(BOOLEAN()),
-          }));
+  TypePtr inferredType;
+  getType(
+      "FUNCTION",
+      {
+          TypeParameter(BIGINT()),
+          TypeParameter(VARCHAR()),
+          TypeParameter(BOOLEAN()),
+      },
+      inferredType);
+  EXPECT_EQ(*type, *inferredType);
 
   testTypeSerde(type);
 }

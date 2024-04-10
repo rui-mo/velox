@@ -1140,18 +1140,29 @@ bool hasType(const std::string& name) {
   return false;
 }
 
-TypePtr getType(
+Status getType(
     const std::string& name,
-    const std::vector<TypeParameter>& parameters) {
+    const std::vector<TypeParameter>& parameters,
+    TypePtr& type) {
   if (singletonBuiltInTypes().count(name)) {
-    return singletonBuiltInTypes().at(name);
+    type = singletonBuiltInTypes().at(name);
+    VELOX_DCHECK_NOT_NULL(type);
+    return Status::OK();
   }
 
   if (parametricBuiltinTypes().count(name)) {
-    return parametricBuiltinTypes().at(name)(parameters);
+    try {
+      type = parametricBuiltinTypes().at(name)(parameters);
+    } catch (const std::exception& e) {
+      type = nullptr;
+      return Status::UserError(e.what());
+    }
+    VELOX_DCHECK_NOT_NULL(type);
+    return Status::OK();
   }
 
-  return getCustomType(name);
+  type = getCustomType(name);
+  return Status::OK();
 }
 
 } // namespace facebook::velox
