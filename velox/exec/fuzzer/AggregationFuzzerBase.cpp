@@ -91,21 +91,6 @@ int32_t AggregationFuzzerBase::randInt(int32_t min, int32_t max) {
   return boost::random::uniform_int_distribution<int32_t>(min, max)(rng_);
 }
 
-bool AggregationFuzzerBase::isSupportedType(const TypePtr& type) const {
-  // Date / IntervalDayTime/ Unknown are not currently supported by DWRF.
-  if (type->isDate() || type->isIntervalDayTime() || type->isUnKnown()) {
-    return false;
-  }
-
-  for (auto i = 0; i < type->size(); ++i) {
-    if (!isSupportedType(type->childAt(i))) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 bool AggregationFuzzerBase::addSignature(
     const std::string& name,
     const FunctionSignaturePtr& signature) {
@@ -467,7 +452,7 @@ AggregationFuzzerBase::computeReferenceResults(
               sql.value(), input, plan->outputType()),
           ReferenceQueryErrorCode::kSuccess);
     } catch (...) {
-      LOG(WARNING) << "Query failed in the reference DB";
+      LOG(WARNING) << "Query failed in the reference DB: " << sql.value();
       return std::make_pair(
           std::nullopt, ReferenceQueryErrorCode::kReferenceQueryFail);
     }
@@ -493,7 +478,7 @@ AggregationFuzzerBase::computeReferenceResultsAsVector(
               sql.value(), input, plan->outputType()),
           ReferenceQueryErrorCode::kSuccess);
     } catch (...) {
-      LOG(WARNING) << "Query failed in the reference DB";
+      LOG(WARNING) << "Query failed in the reference DB: " << sql.value();
       return std::make_pair(
           std::nullopt, ReferenceQueryErrorCode::kReferenceQueryFail);
     }

@@ -11,8 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-add_library(velox_fuzzer_util DuckQueryRunner.cpp PrestoQueryRunner.cpp)
+add_library(velox_fuzzer_util DuckQueryRunner.cpp PrestoQueryRunner.cpp
+                              QueryTranslator.cpp)
 
 target_link_libraries(velox_fuzzer_util velox_core velox_exec_test_lib cpr::cpr
                       velox_type_parser Folly::folly)

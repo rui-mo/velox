@@ -19,6 +19,7 @@
 #include <folly/SocketAddress.h>
 #include <folly/io/async/EventBaseThread.h>
 #include "velox/common/memory/Memory.h"
+#include "velox/exec/fuzzer/QueryTranslator.h"
 #include "velox/exec/fuzzer/ReferenceQueryRunner.h"
 #include "velox/vector/ComplexVector.h"
 
@@ -101,6 +102,7 @@ class PrestoQueryRunner : public velox::exec::test::ReferenceQueryRunner {
       velox::memory::memoryManager()->addRootPool()};
   std::shared_ptr<velox::memory::MemoryPool> pool_{
       rootPool_->addLeafChild("leaf")};
+  std::shared_ptr<QueryTranslator> queryTranslator_;
 };
 
 } // namespace facebook::velox::exec::test

@@ -47,6 +47,21 @@ namespace facebook::velox::exec::test {
 class AggregationFuzzerBase;
 
 namespace {
+namespace {
+bool isSupportedDwrfType(const TypePtr& type) {
+  if (type->isDate() || type->isIntervalDayTime() || type->isUnKnown()) {
+    return false;
+  }
+
+  for (auto i = 0; i < type->size(); ++i) {
+    if (!isSupportedDwrfType(type->childAt(i))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+} // namespace
 
 class AggregationFuzzer : public AggregationFuzzerBase {
  public:
@@ -1063,12 +1078,12 @@ bool AggregationFuzzer::compareEquivalentPlanResults(
                   expectedResult.value(),
                   firstPlan->outputType(),
                   {resultOrError.result}),
-              "Velox and reference DB results don't match");
+              fmt::format("Velox and reference DB results don't match: {}", firstPlan->toString(true)));
           LOG(INFO) << "Verified results against reference DB";
         }
       } else if (referenceQueryRunner_->supportsVeloxVectorResults()) {
-        if (isSupportedType(firstPlan->outputType()) &&
-            isSupportedType(input.front()->type())) {
+        if (isSupportedDwrfType(firstPlan->outputType()) &&
+            isSupportedDwrfType(input.front()->type())) {
           auto referenceResult =
               computeReferenceResultsAsVector(firstPlan, input);
           stats_.updateReferenceQueryStats(referenceResult.second);

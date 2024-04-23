@@ -12,96 +12,56 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Set up Spark connect
-file(
-  GLOB PROTO_FILES
-  RELATIVE ${PROJECT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/proto/spark/connect/*.proto)
-foreach(PROTO ${PROTO_FILES})
-  get_filename_component(PROTO_DIR ${PROTO} DIRECTORY)
-  get_filename_component(PROTO_NAME ${PROTO} NAME_WE)
-  set(PROTO_OUTPUT_DIR ${PROJECT_BINARY_DIR}/${PROTO_DIR})
-  list(APPEND PROTO_SRCS "${PROTO_OUTPUT_DIR}/${PROTO_NAME}.pb.cc")
-  list(APPEND PROTO_HDRS "${PROTO_OUTPUT_DIR}/${PROTO_NAME}.pb.h")
-  list(APPEND GRPC_SRCS "${PROTO_OUTPUT_DIR}/${PROTO_NAME}.grpc.pb.cc")
-  list(APPEND GRPC_HDRS "${PROTO_OUTPUT_DIR}/${PROTO_NAME}.grpc.pb.h")
-  list(APPEND PROTO_FILES_FULL
-       "${PROJECT_SOURCE_DIR}/${PROTO_DIR}/${PROTO_NAME}.proto")
-endforeach()
+add_executable(velox_spark_query_runner_test SparkQueryRunnerTest.cpp)
 
-set(PROTO_OUTPUT_FILES ${PROTO_HDRS} ${PROTO_SRCS})
-set_source_files_properties(${PROTO_OUTPUT_FILES} PROPERTIES GENERATED TRUE)
-
-set(GRPC_OUTPUT_FILES ${GRPC_HDRS} ${GRPC_SRCS})
-set_source_files_properties(${GRPC_OUTPUT_FILES} PROPERTIES GENERATED TRUE)
-
-# Generate Spark connect hearders and sources
-add_custom_command(
-  OUTPUT ${PROTO_OUTPUT_FILES}
-  COMMAND
-    ${Protobuf_PROTOC_EXECUTABLE} --proto_path ${CMAKE_SOURCE_DIR}/ --proto_path
-    ${Protobuf_INCLUDE_DIRS} --cpp_out ${CMAKE_BINARY_DIR} ${PROTO_FILES_FULL}
-  DEPENDS ${Protobuf_PROTOC_EXECUTABLE}
-  COMMENT "Running PROTO compiler"
-  VERBATIM)
-add_custom_target(spark_connect_proto ALL DEPENDS ${PROTO_OUTPUT_FILES})
-# add_dependencies(spark_connect_proto protobuf::libprotobuf)
-
-find_program(GRPC_CPP_PLUGIN grpc_cpp_plugin)
-# Generate grpc headers and sources
-add_custom_command(
-  OUTPUT ${GRPC_OUTPUT_FILES}
-  COMMAND
-    ${Protobuf_PROTOC_EXECUTABLE} --proto_path ${CMAKE_SOURCE_DIR}/ --proto_path
-    ${Protobuf_INCLUDE_DIRS} --grpc_out=${CMAKE_BINARY_DIR}
-    --plugin=protoc-gen-grpc=${GRPC_CPP_PLUGIN} ${PROTO_FILES_FULL}
-  DEPENDS ${Protobuf_PROTOC_EXECUTABLE}
-  COMMENT "Running gRPC C++ protocol buffer compiler"
-  VERBATIM)
-add_custom_target(spark_connect_grpc_proto ALL DEPENDS ${GRPC_OUTPUT_FILES})
-
-set(SRCS ${PROTO_SRCS} ${GRPC_SRCS} SparkQueryRunner.cpp
-         SparkQueryTranslator.cpp)
-
-add_library(velox_spark_query_runner ${SRCS})
-target_include_directories(velox_spark_query_runner
-                           PUBLIC ${PROJECT_BINARY_DIR}/)
-
-include(${PROJECT_SOURCE_DIR}/CMake/Findgrpc.cmake)
-target_link_libraries(
-  velox_spark_query_runner
-  velox_fuzzer_util
-  velox_exec_test_lib
-  velox_arrow_bridge
-  grpc::grpc++
-  grpc::grpc
-  gpr::gpr
-  protobuf::libprotobuf
-  z::z
-  re2::re2
-  address_sorting::address_sorting
-  cares::cares
-  boringssl::ssl
-  boringssl::crypto
-  pthread
-  arrow
-  lz4::lz4
-  zstd::zstd
-  Snappy::snappy)
-
-add_executable(spark_aggregation_fuzzer_test SparkAggregationFuzzerTest.cpp)
+add_test(
+  NAME velox_spark_query_runner_test
+  COMMAND velox_spark_query_runner_test
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(
-  spark_aggregation_fuzzer_test
-  velox_aggregation_fuzzer
-  velox_aggregation_fuzzer_base
+  velox_spark_query_runner_test
+  velox_dwio_common
+  velox_dwio_common_exception
+  velox_dwio_common_test_utils
+  velox_aggregates
+  velox_functions_spark_window
   velox_functions_spark_aggregates
+  velox_exec
+  velox_exec_test_lib
   velox_spark_query_runner
   velox_fuzzer_util
+  velox_functions_spark
+  velox_functions_lib
+  velox_functions_test_lib
   velox_window
-  velox_vector_test_lib
+  velox_hive_connector
+  velox_memory
+  velox_serialization
+  velox_test_util
+  velox_parse_expression
+  velox_type
+  velox_parse_utils
+  velox_vector
+  velox_vector_fuzzer
+  velox_presto_serializer
+  velox_dwio_dwrf_writer
+  Boost::atomic
+  Boost::context
+  Boost::date_time
+  Boost::filesystem
+  Boost::program_options
+  Boost::regex
+  Boost::thread
+  Boost::system
   gtest
   gtest_main
+  gmock
+  Folly::folly
+  gflags::gflags
+  glog::glog
+  fmt::fmt
+  ${FILESYSTEM}
   grpc::grpc++
   grpc::grpc
   gpr::gpr
@@ -191,7 +151,3 @@ target_link_libraries(
   lz4::lz4
   zstd::zstd
   Snappy::snappy)
-
-if(${VELOX_BUILD_TESTING})
-  add_subdirectory(tests)
-endif()

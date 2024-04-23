@@ -354,7 +354,8 @@ void gatherFromTimestampBuffer(
   auto src = (*vec.values()).as<Timestamp>();
   auto dst = out.asMutable<int64_t>();
   vector_size_t j = 0; // index into dst
-  if (!vec.mayHaveNulls() || vec.getNullCount() == 0) {
+  const auto nullCount = vec.getNullCount() ? vec.getNullCount().value() : 0;
+  if (!vec.mayHaveNulls()) {
     switch (unit) {
       case TimestampUnit::kSecond:
         rows.apply([&](vector_size_t i) { dst[j++] = src[i].getSeconds(); });

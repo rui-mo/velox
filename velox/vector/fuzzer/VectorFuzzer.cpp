@@ -362,8 +362,10 @@ VectorPtr VectorFuzzer::fuzz(const TypePtr& type, vector_size_t size) {
     vectorSize += rand<uint32_t>(rng_) % 8;
   }
 
+  // TODO: use an option.
+  bool forArrowParquet = true;
   // 20% chance of adding a constant vector.
-  if (coinToss(0.2)) {
+  if (!forArrowParquet && coinToss(0.2)) {
     vector = fuzzConstant(type, vectorSize);
   } else {
     vector = type->isPrimitiveType() ? fuzzFlatPrimitive(type, vectorSize)
@@ -379,18 +381,25 @@ VectorPtr VectorFuzzer::fuzz(const TypePtr& type, vector_size_t size) {
     vector = wrapInLazyVector(vector);
   }
 
-  // Toss a coin and add dictionary indirections.
-  while (coinToss(0.5)) {
-    vectorSize = size;
-    if (!usingLazyVector && vectorSize > 0 && coinToss(0.05)) {
-      vectorSize += rand<uint32_t>(rng_) % 8;
-    }
-    vector = fuzzDictionary(vector, vectorSize);
-    if (vectorSize > size) {
-      auto offset = rand<uint32_t>(rng_) % (vectorSize - size + 1);
-      vector = vector->slice(offset, size);
+  // exportFlattenedVector in Bridge.cpp does not support nested encoding and
+  // non-scalar type.
+  if ((forArrowParquet && vector->wrappedVector()->isFlatEncoding() &&
+       vector->isScalar()) ||
+      !forArrowParquet) {
+    // Toss a coin and add dictionary indirections.
+    while (coinToss(0.5)) {
+      vectorSize = size;
+      if (!usingLazyVector && vectorSize > 0 && coinToss(0.05)) {
+        vectorSize += rand<uint32_t>(rng_) % 8;
+      }
+      vector = fuzzDictionary(vector, vectorSize);
+      if (vectorSize > size) {
+        auto offset = rand<uint32_t>(rng_) % (vectorSize - size + 1);
+        vector = vector->slice(offset, size);
+      }
     }
   }
+
   VELOX_CHECK_EQ(vector->size(), size);
   return vector;
 }
