@@ -126,10 +126,7 @@ class MakeTimestampFunction : public exec::VectorFunction {
         try {
           constantTzID = util::getTimeZoneID(std::string_view(tz));
         } catch (const VeloxException& e) {
-          context.setErrors(
-              rows,
-              std::make_exception_ptr(VeloxUserError(
-                  std::current_exception(), e.message(), false)));
+          context.setErrors(rows, std::current_exception());
           return;
         }
         rows.applyToSelected([&](vector_size_t row) {
