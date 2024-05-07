@@ -545,6 +545,24 @@ TEST_F(ArrowBridgeArrayExportTest, flatTimestamp) {
   EXPECT_THROW(
       testFlatVector<Timestamp>({Timestamp(9246211200, 0)}, TIMESTAMP()),
       VeloxUserError);
+
+  const std::vector<std::optional<Timestamp>> inputData = {
+        std::nullopt,
+        Timestamp(1699300965, 12'349),
+        Timestamp(-2208960000, 0), // 1900-01-01
+        Timestamp(3155788800, 999'999'999),
+      };
+  auto vector = vectorMaker_.flatVectorNullable(inputData);
+  
+  // Null count is zero and mayHaveNulls() is true.
+  vector->setNullCount(0);
+
+  ArrowArray arrowArray;
+  velox::exportToArrow(vector, arrowArray, pool_.get(), options_);
+  validateArray(inputData, arrowArray);
+  arrowArray.release(&arrowArray);
+  EXPECT_EQ(nullptr, arrowArray.release);
+  EXPECT_EQ(nullptr, arrowArray.private_data);
 }
 
 TEST_F(ArrowBridgeArrayExportTest, flatString) {
