@@ -758,6 +758,26 @@ void CastExpr::applyPeeled(
       (toType->kind() == TypeKind::VARCHAR ||
        toType->kind() == TypeKind::VARBINARY)) {
     result = applyTimestampToVarcharCast(toType, rows, context, input);
+  } else if (toType->kind() == TypeKind::VARBINARY) {
+    switch (fromType->kind()) {
+      case TypeKind::TINYINT:
+        result = applyIntToBinaryCast<int8_t>(rows, context, input);
+        break;
+      case TypeKind::SMALLINT:
+        result = applyIntToBinaryCast<int16_t>(rows, context, input);
+        break;
+      case TypeKind::INTEGER:
+        result = applyIntToBinaryCast<int32_t>(rows, context, input);
+        break;
+      case TypeKind::BIGINT:
+        result = applyIntToBinaryCast<int64_t>(rows, context, input);
+        break;
+      default:
+        // Handle primitive type conversions.
+        applyCastPrimitivesDispatch<TypeKind::VARBINARY>(
+            fromType, toType, rows, context, input, result);
+        break;
+    }
   } else {
     switch (toType->kind()) {
       case TypeKind::MAP:
@@ -835,6 +855,35 @@ VectorPtr CastExpr::applyTimestampToVarcharCast(
 
   // Update the exact buffer size.
   buffer->setSize(rawBuffer - buffer->asMutable<char>());
+  return result;
+}
+
+template <typename TInput>
+VectorPtr CastExpr::applyIntToBinaryCast(
+    const SelectivityVector& rows,
+    exec::EvalCtx& context,
+    const BaseVector& input) {
+  VectorPtr result = BaseVector::create<FlatVector<StringView>>(
+      VARBINARY(), rows.end(), context.pool());
+  auto flatResult = result->asFlatVector<StringView>();
+  const auto simpleInput = input.as<SimpleVector<TInput>>();
+
+  // The created string view is always inlined for int types.
+  char inlined[sizeof(TInput)];
+  applyToSelectedNoThrowLocal(context, rows, result, [&](vector_size_t row) {
+    TInput input = simpleInput->valueAt(row);
+    if constexpr (std::is_same_v<TInput, int8_t>) {
+      inlined[0] = static_cast<char>(input & 0xFF);
+    } else {
+      for (int i = sizeof(TInput) - 1; i >= 0; --i) {
+        inlined[i] = static_cast<char>(input & 0xFF);
+        input >>= 8;
+      }
+    }
+    const auto stringView = StringView(inlined, sizeof(TInput));
+    flatResult->setNoCopy(row, stringView);
+  });
+
   return result;
 }
 
@@ -980,6 +1029,15 @@ ExprPtr CastCallToSpecialForm::constructSpecialForm(
     std::vector<ExprPtr>&& compiledChildren,
     bool trackCpuUsage,
     const core::QueryConfig& config) {
+  const auto inputKind = compiledChildren[0]->type()->kind();
+  if (type->kind() == TypeKind::VARBINARY &&
+      (inputKind == TypeKind::TINYINT || inputKind == TypeKind::SMALLINT ||
+       inputKind == TypeKind::INTEGER || inputKind == TypeKind::BIGINT)) {
+    VELOX_UNSUPPORTED(
+        "Cannot cast {} to VARBINARY.",
+        compiledChildren[0]->type()->toString());
+  }
+
   VELOX_CHECK_EQ(
       compiledChildren.size(),
       1,
