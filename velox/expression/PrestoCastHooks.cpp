@@ -32,6 +32,10 @@ PrestoCastHooks::PrestoCastHooks(const core::QueryConfig& config)
   }
 }
 
+bool PrestoCastHooks::canCastIntToBinary() const {
+  return false;
+}
+
 Timestamp PrestoCastHooks::castStringToTimestamp(const StringView& view) const {
   auto result = util::fromTimestampWithTimezoneString(view.data(), view.size());
 

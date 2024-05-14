@@ -28,6 +28,9 @@ class CastHooks {
  public:
   virtual ~CastHooks() = default;
 
+  // Returns whether it is supported to cast int types as binary.
+  virtual bool canCastIntToBinary() const = 0;
+
   virtual Timestamp castStringToTimestamp(const StringView& view) const = 0;
 
   virtual int32_t castStringToDate(const StringView& dateString) const = 0;

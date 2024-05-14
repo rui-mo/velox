@@ -26,6 +26,9 @@ class PrestoCastHooks : public CastHooks {
  public:
   explicit PrestoCastHooks(const core::QueryConfig& config);
 
+  // Returns false.
+  bool canCastIntToBinary() const override;
+
   // Uses the default implementation of 'castFromDateString'.
   Timestamp castStringToTimestamp(const StringView& view) const override;
 

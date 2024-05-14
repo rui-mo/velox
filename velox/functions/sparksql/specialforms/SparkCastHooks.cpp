@@ -20,6 +20,10 @@
 
 namespace facebook::velox::functions::sparksql {
 
+bool SparkCastHooks::canCastIntToBinary() const {
+  return true;
+}
+
 Timestamp SparkCastHooks::castStringToTimestamp(const StringView& view) const {
   return util::fromTimestampString(view.data(), view.size());
 }

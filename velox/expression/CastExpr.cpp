@@ -758,6 +758,22 @@ void CastExpr::applyPeeled(
       (toType->kind() == TypeKind::VARCHAR ||
        toType->kind() == TypeKind::VARBINARY)) {
     result = applyTimestampToVarcharCast(toType, rows, context, input);
+  } else if (
+      fromType->kind() == TypeKind::TINYINT &&
+      toType->kind() == TypeKind::VARBINARY) {
+    result = applyIntToBinaryCast<int8_t>(rows, context, input);
+  } else if (
+      fromType->kind() == TypeKind::SMALLINT &&
+      toType->kind() == TypeKind::VARBINARY) {
+    result = applyIntToBinaryCast<int16_t>(rows, context, input);
+  } else if (
+      fromType->kind() == TypeKind::INTEGER &&
+      toType->kind() == TypeKind::VARBINARY) {
+    result = applyIntToBinaryCast<int32_t>(rows, context, input);
+  } else if (
+      fromType->kind() == TypeKind::BIGINT &&
+      toType->kind() == TypeKind::VARBINARY) {
+    result = applyIntToBinaryCast<int64_t>(rows, context, input);
   } else {
     switch (toType->kind()) {
       case TypeKind::MAP:
@@ -835,6 +851,37 @@ VectorPtr CastExpr::applyTimestampToVarcharCast(
 
   // Update the exact buffer size.
   buffer->setSize(rawBuffer - buffer->asMutable<char>());
+  return result;
+}
+
+template <typename TInput>
+VectorPtr CastExpr::applyIntToBinaryCast(
+    const SelectivityVector& rows,
+    exec::EvalCtx& context,
+    const BaseVector& input) {
+  VELOX_USER_CHECK(
+      hooks_->canCastIntToBinary(),
+      "Cannot cast {} to VARBINARY.",
+      CppToType<TInput>::create()->toString());
+
+  VectorPtr result;
+  context.ensureWritable(rows, VARBINARY(), result);
+  (*result).clearNulls(rows);
+  auto flatResult = result->asFlatVector<StringView>();
+  const auto simpleInput = input.as<SimpleVector<TInput>>();
+
+  // The created string view is always inlined for int types.
+  char inlined[sizeof(TInput)];
+  applyToSelectedNoThrowLocal(context, rows, result, [&](vector_size_t row) {
+    TInput input = simpleInput->valueAt(row);
+    for (int i = sizeof(TInput) - 1; i >= 0; --i) {
+      inlined[i] = static_cast<char>(input & 0xFF);
+      input >>= 8;
+    }
+    const auto stringView = StringView(inlined, sizeof(TInput));
+    flatResult->setNoCopy(row, stringView);
+  });
+
   return result;
 }
 
