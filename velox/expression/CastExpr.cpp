@@ -863,9 +863,8 @@ VectorPtr CastExpr::applyIntToBinaryCast(
     const SelectivityVector& rows,
     exec::EvalCtx& context,
     const BaseVector& input) {
-  VectorPtr result = BaseVector::create<FlatVector<StringView>>(
-      VARBINARY(), rows.end(), context.pool());
-  auto flatResult = result->asFlatVector<StringView>();
+  auto result = BaseVector::create(VARBINARY(), rows.end(), context.pool());
+  const auto flatResult = result->asFlatVector<StringView>();
   const auto simpleInput = input.as<SimpleVector<TInput>>();
 
   // The created string view is always inlined for int types.
@@ -1029,6 +1028,11 @@ ExprPtr CastCallToSpecialForm::constructSpecialForm(
     std::vector<ExprPtr>&& compiledChildren,
     bool trackCpuUsage,
     const core::QueryConfig& config) {
+  VELOX_CHECK_EQ(
+      compiledChildren.size(),
+      1,
+      "CAST statements expect exactly 1 argument, received {}.",
+      compiledChildren.size());
   const auto inputKind = compiledChildren[0]->type()->kind();
   if (type->kind() == TypeKind::VARBINARY &&
       (inputKind == TypeKind::TINYINT || inputKind == TypeKind::SMALLINT ||
@@ -1037,12 +1041,6 @@ ExprPtr CastCallToSpecialForm::constructSpecialForm(
         "Cannot cast {} to VARBINARY.",
         compiledChildren[0]->type()->toString());
   }
-
-  VELOX_CHECK_EQ(
-      compiledChildren.size(),
-      1,
-      "CAST statements expect exactly 1 argument, received {}.",
-      compiledChildren.size());
   return std::make_shared<CastExpr>(
       type,
       std::move(compiledChildren[0]),
