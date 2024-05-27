@@ -26,6 +26,7 @@
 #include "velox/functions/prestosql/fuzzer/MultiplyArgGenerator.h"
 #include "velox/functions/prestosql/fuzzer/PlusMinusArgGenerator.h"
 #include "velox/functions/prestosql/fuzzer/TruncateArgGenerator.h"
+#include "velox/expression/fuzzer/SpecialFormSignatureGenerator.h"
 #include "velox/functions/prestosql/registration/RegistrationFunctions.h"
 
 DEFINE_int64(
@@ -96,5 +97,7 @@ int main(int argc, char** argv) {
        {"mod", std::make_shared<ModulusArgGenerator>()},
        {"truncate", std::make_shared<TruncateArgGenerator>()}};
 
-  return FuzzerRunner::run(initialSeed, skipFunctions, {{}}, argGenerators);
+  return FuzzerRunner::run(initialSeed, skipFunctions, {{}}, argGenerators,
+  std::make_shared<
+          facebook::velox::fuzzer::SpecialFormSignatureGenerator>());
 }
