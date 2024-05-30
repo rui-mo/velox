@@ -268,6 +268,250 @@ TEST_F(ParquetTableScanTest, countStar) {
   assertQuery(plan, {split}, "SELECT 20");
 }
 
+TEST_F(ParquetTableScanTest, leftSemiJoin) {
+  auto rowType = ROW({
+        "i_brand_id", "i_class_id", "i_category_id", "i_manufact_id"},
+        {INTEGER(), INTEGER(), INTEGER(), INTEGER()});
+  auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
+  core::PlanNodeId leftScanNodeId, rightScanNodeId;
+  auto plan = PlanBuilder(planNodeIdGenerator, pool_.get())
+                  .tableScan(rowType)
+                  .capturePlanNodeId(leftScanNodeId)
+                  .project({"i_brand_id AS t0", "i_class_id AS t1", "i_category_id AS t2", "i_manufact_id AS t3"})
+                  .hashJoin(
+                          {"t0", "t1", "t2"},
+                          {"u0", "u1", "u2"},
+                          PlanBuilder(planNodeIdGenerator, pool_.get())
+                              .tableScan(rowType)
+                              .capturePlanNodeId(rightScanNodeId)
+                              .project({"i_brand_id AS u0", "i_class_id AS u1", "i_category_id AS u2", "i_manufact_id AS u3"})
+                              .planNode(),
+                          "",
+                          {"t3"},
+                          core::JoinType::kLeftSemiFilter)
+                  .planNode();
+
+  CursorParameters params;
+  std::shared_ptr<folly::Executor> executor =
+      std::make_shared<folly::CPUThreadPoolExecutor>(
+          std::thread::hardware_concurrency());
+  std::shared_ptr<core::QueryCtx> queryCtx =
+      core::QueryCtx::create(executor.get());
+  std::unordered_map<std::string, std::string> session = {};
+  queryCtx->setConnectorSessionOverridesUnsafe(
+      kHiveConnectorId, std::move(session));
+  params.queryCtx = queryCtx;
+  params.planNode = plan;
+  const int numSplitsPerFile = 1;
+
+  bool noMoreSplits = false;
+  auto addSplits = [&](exec::Task* task) {
+    if (!noMoreSplits) {
+      auto const splits = HiveConnectorTestBase::makeHiveConnectorSplits(
+          {getExampleFilePath("id.parquet")},
+          numSplitsPerFile,
+          dwio::common::FileFormat::PARQUET);
+      for (const auto& split : splits) {
+        task->addSplit(leftScanNodeId, exec::Split(split));
+        task->addSplit(rightScanNodeId, exec::Split(split));
+      }
+      task->noMoreSplits(leftScanNodeId);
+      task->noMoreSplits(rightScanNodeId);
+    }
+    noMoreSplits = true;
+  };
+  auto result = readCursor(params, addSplits);
+  ASSERT_TRUE(waitForTaskCompletion(result.first->task().get()));
+  int64_t count = 0;
+  for (const auto& rv : result.second) {
+    count += rv->size();
+  }
+  std::cout << "count: " << count << std::endl;
+}
+
+TEST_F(ParquetTableScanTest, rightSemiJoin) {
+  auto rowType = ROW({
+        "i_brand_id", "i_class_id", "i_category_id", "i_manufact_id"},
+        {INTEGER(), INTEGER(), INTEGER(), INTEGER()});
+  auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
+  core::PlanNodeId leftScanNodeId, rightScanNodeId;
+  auto plan = PlanBuilder(planNodeIdGenerator, pool_.get())
+                  .tableScan(rowType)
+                  .capturePlanNodeId(leftScanNodeId)
+                  .project({"i_brand_id AS t0", "i_class_id AS t1", "i_category_id AS t2", "i_manufact_id AS t3"})
+                  .hashJoin(
+                          {"t0", "t1", "t2"},
+                          {"u0", "u1", "u2"},
+                          PlanBuilder(planNodeIdGenerator, pool_.get())
+                              .tableScan(rowType)
+                              .capturePlanNodeId(rightScanNodeId)
+                              .project({"i_brand_id AS u0", "i_class_id AS u1", "i_category_id AS u2", "i_manufact_id AS u3"})
+                              .planNode(),
+                          "",
+                          {"u3"},
+                          core::JoinType::kRightSemiFilter)
+                  .planNode();
+
+  CursorParameters params;
+  std::shared_ptr<folly::Executor> executor =
+      std::make_shared<folly::CPUThreadPoolExecutor>(
+          std::thread::hardware_concurrency());
+  std::shared_ptr<core::QueryCtx> queryCtx =
+      core::QueryCtx::create(executor.get());
+  std::unordered_map<std::string, std::string> session = {};
+  queryCtx->setConnectorSessionOverridesUnsafe(
+      kHiveConnectorId, std::move(session));
+  params.queryCtx = queryCtx;
+  params.planNode = plan;
+  const int numSplitsPerFile = 1;
+
+  bool noMoreSplits = false;
+  auto addSplits = [&](exec::Task* task) {
+    if (!noMoreSplits) {
+      auto const splits = HiveConnectorTestBase::makeHiveConnectorSplits(
+          {getExampleFilePath("id.parquet")},
+          numSplitsPerFile,
+          dwio::common::FileFormat::PARQUET);
+      for (const auto& split : splits) {
+        task->addSplit(leftScanNodeId, exec::Split(split));
+        task->addSplit(rightScanNodeId, exec::Split(split));
+      }
+      task->noMoreSplits(leftScanNodeId);
+      task->noMoreSplits(rightScanNodeId);
+    }
+    noMoreSplits = true;
+  };
+  auto result = readCursor(params, addSplits);
+  ASSERT_TRUE(waitForTaskCompletion(result.first->task().get()));
+  int64_t count = 0;
+  for (const auto& rv : result.second) {
+    count += rv->size();
+  }
+  std::cout << "count: " << count << std::endl;
+}
+
+TEST_F(ParquetTableScanTest, leftOuterJoin) {
+  auto rowType = ROW({
+        "i_brand_id", "i_class_id", "i_category_id", "i_manufact_id"},
+        {INTEGER(), INTEGER(), INTEGER(), INTEGER()});
+  auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
+  core::PlanNodeId leftScanNodeId, rightScanNodeId;
+  auto plan = PlanBuilder(planNodeIdGenerator, pool_.get())
+                  .tableScan(rowType)
+                  .capturePlanNodeId(leftScanNodeId)
+                  .project({"i_brand_id AS t0", "i_class_id AS t1", "i_category_id AS t2", "i_manufact_id AS t3"})
+                  .hashJoin(
+                          {"t0", "t1", "t2"},
+                          {"u0", "u1", "u2"},
+                          PlanBuilder(planNodeIdGenerator, pool_.get())
+                              .tableScan(rowType)
+                              .capturePlanNodeId(rightScanNodeId)
+                              .project({"i_brand_id AS u0", "i_class_id AS u1", "i_category_id AS u2", "i_manufact_id AS u3"})
+                              .planNode(),
+                          "",
+                          {"t3"},
+                          core::JoinType::kLeft)
+                  .planNode();
+
+  CursorParameters params;
+  std::shared_ptr<folly::Executor> executor =
+      std::make_shared<folly::CPUThreadPoolExecutor>(
+          std::thread::hardware_concurrency());
+  std::shared_ptr<core::QueryCtx> queryCtx =
+      core::QueryCtx::create(executor.get());
+  std::unordered_map<std::string, std::string> session = {};
+  queryCtx->setConnectorSessionOverridesUnsafe(
+      kHiveConnectorId, std::move(session));
+  params.queryCtx = queryCtx;
+  params.planNode = plan;
+  const int numSplitsPerFile = 1;
+
+  bool noMoreSplits = false;
+  auto addSplits = [&](exec::Task* task) {
+    if (!noMoreSplits) {
+      auto const splits = HiveConnectorTestBase::makeHiveConnectorSplits(
+          {getExampleFilePath("id.parquet")},
+          numSplitsPerFile,
+          dwio::common::FileFormat::PARQUET);
+      for (const auto& split : splits) {
+        task->addSplit(leftScanNodeId, exec::Split(split));
+        task->addSplit(rightScanNodeId, exec::Split(split));
+      }
+      task->noMoreSplits(leftScanNodeId);
+      task->noMoreSplits(rightScanNodeId);
+    }
+    noMoreSplits = true;
+  };
+  auto result = readCursor(params, addSplits);
+  ASSERT_TRUE(waitForTaskCompletion(result.first->task().get()));
+  int64_t count = 0;
+  for (const auto& rv : result.second) {
+    count += rv->size();
+  }
+  std::cout << "count: " << count << std::endl;
+}
+
+TEST_F(ParquetTableScanTest, rightOuterJoin) {
+  auto rowType = ROW({
+        "i_brand_id", "i_class_id", "i_category_id", "i_manufact_id"},
+        {INTEGER(), INTEGER(), INTEGER(), INTEGER()});
+  auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
+  core::PlanNodeId leftScanNodeId, rightScanNodeId;
+  auto plan = PlanBuilder(planNodeIdGenerator, pool_.get())
+                  .tableScan(rowType)
+                  .capturePlanNodeId(leftScanNodeId)
+                  .project({"i_brand_id AS t0", "i_class_id AS t1", "i_category_id AS t2", "i_manufact_id AS t3"})
+                  .hashJoin(
+                          {"t0", "t1", "t2"},
+                          {"u0", "u1", "u2"},
+                          PlanBuilder(planNodeIdGenerator, pool_.get())
+                              .tableScan(rowType)
+                              .capturePlanNodeId(rightScanNodeId)
+                              .project({"i_brand_id AS u0", "i_class_id AS u1", "i_category_id AS u2", "i_manufact_id AS u3"})
+                              .planNode(),
+                          "",
+                          {"u3"},
+                          core::JoinType::kRight)
+                  .planNode();
+
+  CursorParameters params;
+  std::shared_ptr<folly::Executor> executor =
+      std::make_shared<folly::CPUThreadPoolExecutor>(
+          std::thread::hardware_concurrency());
+  std::shared_ptr<core::QueryCtx> queryCtx =
+      core::QueryCtx::create(executor.get());
+  std::unordered_map<std::string, std::string> session = {};
+  queryCtx->setConnectorSessionOverridesUnsafe(
+      kHiveConnectorId, std::move(session));
+  params.queryCtx = queryCtx;
+  params.planNode = plan;
+  const int numSplitsPerFile = 1;
+
+  bool noMoreSplits = false;
+  auto addSplits = [&](exec::Task* task) {
+    if (!noMoreSplits) {
+      auto const splits = HiveConnectorTestBase::makeHiveConnectorSplits(
+          {getExampleFilePath("id.parquet")},
+          numSplitsPerFile,
+          dwio::common::FileFormat::PARQUET);
+      for (const auto& split : splits) {
+        task->addSplit(leftScanNodeId, exec::Split(split));
+        task->addSplit(rightScanNodeId, exec::Split(split));
+      }
+      task->noMoreSplits(leftScanNodeId);
+      task->noMoreSplits(rightScanNodeId);
+    }
+    noMoreSplits = true;
+  };
+  auto result = readCursor(params, addSplits);
+  ASSERT_TRUE(waitForTaskCompletion(result.first->task().get()));
+  int64_t count = 0;
+  for (const auto& rv : result.second) {
+    count += rv->size();
+  }
+  std::cout << "count: " << count << std::endl;
+}
+
 TEST_F(ParquetTableScanTest, decimalSubfieldFilter) {
   // decimal.parquet holds two columns (a: DECIMAL(5, 2), b: DECIMAL(20, 5)) and
   // 20 rows (10 rows per group). Data is in plain uncompressed format:
