@@ -80,6 +80,7 @@ jobs:
             source scripts/setup-centos9.sh
             install_cuda ${CUDA_VERSION}
           fi
+          source scripts/setup-centos8.sh && install_grpc
 
       - uses: assignUser/stash/restore@v1
         with:

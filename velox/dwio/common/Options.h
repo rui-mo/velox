@@ -162,7 +162,9 @@ class RowReaderOptions {
   uint64_t skipRows_ = 0;
   std::shared_ptr<UnitLoaderFactory> unitLoaderFactory_;
 
-  TimestampPrecision timestampPrecision_ = TimestampPrecision::kMilliseconds;
+  // After https://github.com/facebookincubator/velox/pull/4680, the precision
+  // could be controlled via HiveConfig.
+  TimestampPrecision timestampPrecision_ = TimestampPrecision::kMicroseconds;
 
   std::shared_ptr<FormatSpecificOptions> formatSpecificOptions_;
 
