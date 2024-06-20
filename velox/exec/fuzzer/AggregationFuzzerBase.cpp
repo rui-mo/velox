@@ -481,8 +481,12 @@ AggregationFuzzerBase::computeReferenceResults(
           referenceQueryRunner_->execute(
               sql.value(), input, plan->outputType()),
           ReferenceQueryErrorCode::kSuccess);
+    } catch (VeloxRuntimeError& e) {
+      LOG(WARNING) << "Query failed in the reference DB: " << e.message()
+                   << ", query: " << sql.value() << ", seed: " << currentSeed_;
     } catch (...) {
-      LOG(WARNING) << "Query failed in the reference DB";
+      LOG(WARNING) << "Query failed in the reference DB, query: "
+                   << sql.value() << ", seed: " << currentSeed_;
       return std::make_pair(
           std::nullopt, ReferenceQueryErrorCode::kReferenceQueryFail);
     }
@@ -507,8 +511,12 @@ AggregationFuzzerBase::computeReferenceResultsAsVector(
           referenceQueryRunner_->executeVector(
               sql.value(), input, plan->outputType()),
           ReferenceQueryErrorCode::kSuccess);
+    } catch (VeloxRuntimeError& e) {
+      LOG(WARNING) << "Query failed in the reference DB: " << e.message()
+                   << ", query: " << sql.value() << ", seed: " << currentSeed_;
     } catch (...) {
-      LOG(WARNING) << "Query failed in the reference DB";
+      LOG(WARNING) << "Query failed in the reference DB, query: "
+                   << sql.value() << ", seed: " << currentSeed_;
       return std::make_pair(
           std::nullopt, ReferenceQueryErrorCode::kReferenceQueryFail);
     }
@@ -560,7 +568,8 @@ void AggregationFuzzerBase::compare(
   if (!customVerification) {
     VELOX_CHECK(
         assertEqualResults({expected.result}, {actual.result}),
-        "Logically equivalent plans produced different results");
+        "Logically equivalent plans produced different results, seed: {}",
+        currentSeed_);
     return;
   }
 

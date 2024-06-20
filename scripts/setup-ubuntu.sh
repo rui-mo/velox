@@ -168,6 +168,26 @@ function install_cuda {
   $SUDO apt install -y cuda-nvcc-$(echo $1 | tr '.' '-') cuda-cudart-dev-$(echo $1 | tr '.' '-')
 }
 
+function install_grpc {
+  git clone https://github.com/grpc/grpc.git --branch v1.50.0 --single-branch
+  (
+    cd grpc
+    git submodule update --init
+    mkdir -p cmake/build
+    cd cmake/build
+    cmake ../.. -DgRPC_INSTALL=ON              \
+              -DCMAKE_BUILD_TYPE=Release       \
+              -DgRPC_ABSL_PROVIDER=module      \
+              -DgRPC_CARES_PROVIDER=module     \
+              -DgRPC_PROTOBUF_PROVIDER=module  \
+              -DgRPC_RE2_PROVIDER=package      \
+              -DgRPC_SSL_PROVIDER=package      \
+              -DgRPC_ZLIB_PROVIDER=package
+    make "-j$(nproc)"
+    $SUDO make install
+  )
+}
+
 function install_velox_deps {
   run_and_time install_velox_deps_from_apt
   run_and_time install_fmt
@@ -184,6 +204,7 @@ function install_velox_deps {
 function install_apt_deps {
   install_build_prerequisites
   install_velox_deps_from_apt
+  run_and_time install_grpc
 }
 
 (return 2> /dev/null) && return # If script was sourced, don't run commands.
