@@ -80,7 +80,6 @@ target_link_libraries(
   absl::absl_symbolize
   absl::absl_demangle_internal
   absl::absl_flags_parse
-  absl::absl_flags
   absl::absl_cord_internal
   absl::absl_bad_optional_access
   absl::absl_throw_delegate
@@ -92,6 +91,7 @@ target_link_libraries(
   absl::absl_random_internal_randen_hwaes
   absl::absl_random_internal_randen_slow
   absl::absl_graphcycles_internal
+  absl::absl_kernel_timeout_internal
   absl::absl_base
   absl::absl_malloc_internal
   absl::absl_examine_stack
@@ -105,6 +105,9 @@ target_link_libraries(
   absl::absl_raw_logging_internal
   absl::absl_str_format_internal
   absl::absl_strerror
+  absl::absl_crc_cord_state
+  absl::absl_crc32c
+  absl::absl_crc_internal
   absl::absl_strings
   absl::absl_strings_internal
   absl::absl_raw_hash_set

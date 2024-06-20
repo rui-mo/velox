@@ -196,24 +196,58 @@ function install_cuda {
 }
 
 function install_grpc {
-  git clone https://github.com/grpc/grpc.git --branch v1.50.0 --single-branch
-  (
-    cd grpc
-    git submodule update --init
-    mkdir -p cmake/build
-    cd cmake/build
-    cmake ../.. -DgRPC_INSTALL=ON              \
-              -DCMAKE_BUILD_TYPE=Release       \
-              -DgRPC_ABSL_PROVIDER=module      \
-              -DgRPC_CARES_PROVIDER=module     \
-              -DgRPC_PROTOBUF_PROVIDER=module  \
-              -DgRPC_RE2_PROVIDER=package      \
-              -DgRPC_SSL_PROVIDER=package      \
-              -DgRPC_ZLIB_PROVIDER=package
-    make "-j$(nproc)"
-    $SUDO make install
-  )
+  # abseil-cpp
+  github_checkout abseil/abseil-cpp 20240116.2 --depth 1
+  cmake_install \
+    -DABSL_BUILD_TESTING=OFF \
+    -DCMAKE_CXX_STANDARD=17 \
+    -DABSL_PROPAGATE_CXX_STD=ON \
+    -DABSL_ENABLE_INSTALL=ON
+
+  # protobuf
+  github_checkout protocolbuffers/protobuf v21.8 --depth 1
+  cmake_install \
+    -Dprotobuf_BUILD_TESTS=OFF
+
+  # c-ares
+  github_checkout c-ares/c-ares cares-1_17_2 --depth 1
+  cmake_install \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCARES_STATIC=ON \
+    -DCARES_INSTALL=ON
+
+  # grpc
+  github_checkout grpc/grpc v1.48.1 --depth 1
+  cmake_install \
+    -DgRPC_BUILD_TESTS=OFF \
+    -DgRPC_ABSL_PROVIDER=package \
+    -DgRPC_ZLIB_PROVIDER=package \
+    -DgRPC_CARES_PROVIDER=package \
+    -DgRPC_RE2_PROVIDER=package \
+    -DgRPC_SSL_PROVIDER=package \
+    -DgRPC_PROTOBUF_PROVIDER=package \
+    -DgRPC_INSTALL=ON
 }
+
+# function install_grpc {
+#   git clone https://github.com/grpc/grpc.git --branch v1.50.0 --single-branch
+#   (
+#     cd grpc
+#     git submodule update --init
+#     mkdir -p cmake/build
+#     cd cmake/build
+#     cmake ../.. -DgRPC_INSTALL=ON              \
+#               -DCMAKE_BUILD_TYPE=Release       \
+#               -DgRPC_ABSL_PROVIDER=module      \
+#               -DgRPC_CARES_PROVIDER=module     \
+#               -DgRPC_PROTOBUF_PROVIDER=module  \
+#               -DgRPC_RE2_PROVIDER=package      \
+#               -DgRPC_SSL_PROVIDER=package      \
+#               -DgRPC_ZLIB_PROVIDER=package
+#     make "-j$(nproc)"
+#     $SUDO make install
+#   )
+# }
 
 function install_velox_deps {
   run_and_time install_velox_deps_from_apt
