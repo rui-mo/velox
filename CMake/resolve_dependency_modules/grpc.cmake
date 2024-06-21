@@ -25,7 +25,7 @@ string(CONCAT VELOX_GRPC_SOURCE_URL
 
 resolve_dependency_url(GRPC)
 
-message(STATUS "Building Google Cloud CPP from source")
+message(STATUS "Building gRPC from source")
 
 FetchContent_Declare(
   gRPC
@@ -57,4 +57,7 @@ set(gRPC_INSTALL
 FetchContent_MakeAvailable(gRPC)
 add_library(gRPC::grpc ALIAS grpc)
 add_library(gRPC::grpc++ ALIAS grpc++)
+add_library(gRPC::gpr ALIAS gpr)
+add_library(gRPC::address_sorting ALIAS address_sorting)
+add_library(gRPC::upb ALIAS upb)
 add_executable(gRPC::grpc_cpp_plugin ALIAS grpc_cpp_plugin)

@@ -456,6 +456,19 @@ add_compile_definitions(FOLLY_HAVE_INT128_T=1)
 set_source(folly)
 resolve_dependency(folly)
 
+# Spark qury runner depends on absl, c-ares, grpc and boringssl.
+set_source(absl)
+resolve_dependency(absl 20240116 EXACT)
+
+set_source(cares)
+resolve_dependency(cares 1.17.2 EXACT)
+
+set_source(gRPC)
+resolve_dependency(gRPC 1.48.1 EXACT)
+
+set_source(boringssl)
+resolve_dependency(boringssl)
+
 if(VELOX_ENABLE_REMOTE_FUNCTIONS)
   # TODO: Move this to use resolve_dependency(). For some reason, FBThrift
   # requires clients to explicitly install fizz and wangle.
