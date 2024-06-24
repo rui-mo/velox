@@ -35,27 +35,29 @@ set_source_files_properties(${PROTO_OUTPUT_FILES} PROPERTIES GENERATED TRUE)
 set(GRPC_OUTPUT_FILES ${GRPC_HDRS} ${GRPC_SRCS})
 set_source_files_properties(${GRPC_OUTPUT_FILES} PROPERTIES GENERATED TRUE)
 
+# Ensure that the option --proto_path is not given an empty argument
+foreach(PROTO_PATH ${PROJECT_SOURCE_DIR} ${Protobuf_INCLUDE_DIRS})
+  list(APPEND PROTO_PATH_ARGS --proto_path=${PROTO_PATH})
+endforeach()
+
 # Generate Spark connect hearders and sources
 add_custom_command(
   OUTPUT ${PROTO_OUTPUT_FILES}
-  COMMAND
-    ${Protobuf_PROTOC_EXECUTABLE} --proto_path ${CMAKE_SOURCE_DIR}/ --proto_path
-    ${Protobuf_INCLUDE_DIRS} --cpp_out ${CMAKE_BINARY_DIR} ${PROTO_FILES_FULL}
-  DEPENDS ${Protobuf_PROTOC_EXECUTABLE}
+  COMMAND protobuf::protoc ${PROTO_PATH_ARGS} --cpp_out ${CMAKE_BINARY_DIR}
+          ${PROTO_FILES_FULL}
+  DEPENDS protobuf::protoc
   COMMENT "Running PROTO compiler"
   VERBATIM)
 add_custom_target(spark_connect_proto ALL DEPENDS ${PROTO_OUTPUT_FILES})
-# add_dependencies(spark_connect_proto protobuf::libprotobuf)
 
-find_program(GRPC_CPP_PLUGIN grpc_cpp_plugin)
 # Generate grpc headers and sources
 add_custom_command(
   OUTPUT ${GRPC_OUTPUT_FILES}
   COMMAND
-    ${Protobuf_PROTOC_EXECUTABLE} --proto_path ${CMAKE_SOURCE_DIR}/ --proto_path
-    ${Protobuf_INCLUDE_DIRS} --grpc_out=${CMAKE_BINARY_DIR}
-    --plugin=protoc-gen-grpc=${GRPC_CPP_PLUGIN} ${PROTO_FILES_FULL}
-  DEPENDS ${Protobuf_PROTOC_EXECUTABLE}
+    protobuf::protoc ${PROTO_PATH_ARGS} --grpc_out=${CMAKE_BINARY_DIR}
+    --plugin=protoc-gen-grpc=$<TARGET_FILE:gRPC::grpc_cpp_plugin>
+    ${PROTO_FILES_FULL}
+  DEPENDS protobuf::protoc
   COMMENT "Running gRPC C++ protocol buffer compiler"
   VERBATIM)
 add_custom_target(spark_connect_grpc_proto ALL DEPENDS ${GRPC_OUTPUT_FILES})
@@ -78,9 +80,9 @@ target_link_libraries(
   ZLIB::ZLIB
   re2::re2
   gRPC::address_sorting
-  cares::cares
-  boringssl::ssl
-  boringssl::crypto
+  c-ares::cares
+  OpenSSL::SSL
+  OpenSSL::Crypto
   pthread
   arrow
   lz4::lz4
@@ -107,10 +109,10 @@ target_link_libraries(
   ZLIB::ZLIB
   re2::re2
   gRPC::address_sorting
-  cares::cares
+  c-ares::cares
   gRPC::upb
-  boringssl::ssl
-  boringssl::crypto
+  OpenSSL::SSL
+  OpenSSL::Crypto
   absl::statusor
   absl::status
   absl::cordz_info

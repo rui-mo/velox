@@ -45,12 +45,12 @@ void writeToFile(
     memory::MemoryPool* pool) {
   VELOX_CHECK_GT(data.size(), 0);
 
-  dwio::common::WriterOptions options;
-  options.schema = data[0]->type();
-  options.memoryPool = pool;
-  // Spark does not recognize timestamp written as nano unit and int64 type in
+  auto options = std::make_shared<dwio::common::WriterOptions>();
+  options->schema = data[0]->type();
+  options->memoryPool = pool;
+  // Spark does not recognize int64-timestamp written as nano precision in
   // Parquet.
-  options.parquetWriteTimestampUnit = 6 /*kMirco*/;
+  options->parquetWriteTimestampUnit = 6 /*kMirco*/;
 
   auto writeFile = std::make_unique<LocalWriteFile>(path, true, false);
   auto sink =
@@ -60,26 +60,14 @@ void writeToFile(
           ->createWriter(std::move(sink), options);
 
   for (const auto& vector : data) {
+    // When vector is dictionary-encoded, complex types are not supported in
+    // exportFlattenedVector. Flatten the vector before writing to Parquet.
+    // https://github.com/facebookincubator/velox/issues/10397
     VectorPtr flattened = vector;
     BaseVector::flattenVector(flattened);
     writer->write(flattened);
   }
   writer->close();
-}
-
-bool isSupportedType(const TypePtr& type) {
-  if (type->isDate() || type->isIntervalDayTime() || type->isUnKnown()) {
-    return false;
-  }
-
-  for (auto i = 0; i < type->size(); ++i) {
-    const auto& child = type->childAt(i);
-    if (!isSupportedType(child)) {
-      return false;
-    }
-  }
-
-  return true;
 }
 
 void appendComma(int32_t i, std::stringstream& sql) {
@@ -157,39 +145,17 @@ SparkQueryRunner::SparkQueryRunner(const std::string& coordinatorUri) {
   stub_ = spark::connect::SparkConnectService::NewStub(channel);
 }
 
-std::vector<RowVectorPtr> SparkQueryRunner::execute(
-    const std::string& content) {
-  auto sql = google::protobuf::Arena::CreateMessage<SQL>(&arena_);
-  sql->set_query(content);
-
-  auto relation = google::protobuf::Arena::CreateMessage<Relation>(&arena_);
-  relation->set_allocated_sql(sql);
-
-  auto plan = google::protobuf::Arena::CreateMessage<Plan>(&arena_);
-  plan->set_allocated_root(relation);
-
-  auto context = google::protobuf::Arena::CreateMessage<UserContext>(&arena_);
-  context->set_user_id(kUserId);
-  context->set_user_name(kUserName);
-
-  auto request =
-      google::protobuf::Arena::CreateMessage<ExecutePlanRequest>(&arena_);
-  request->set_session_id(kSessionId);
-  request->set_allocated_user_context(context);
-  request->set_allocated_plan(plan);
-
-  grpc::ClientContext clientContext;
-  auto reader = stub_->ExecutePlan(&clientContext, *request);
-  ExecutePlanResponse response;
-  std::vector<RowVectorPtr> results;
-  while (reader->Read(&response)) {
-    if (response.session_id() == kSessionId && response.has_arrow_batch()) {
-      const std::string& data = response.arrow_batch().data();
-      const auto batchResults = readArrowData(data);
-      results.insert(results.end(), batchResults.begin(), batchResults.end());
-    }
+std::optional<std::string> SparkQueryRunner::toSql(
+    const velox::core::PlanNodePtr& plan) {
+  if (const auto aggregationNode =
+          std::dynamic_pointer_cast<const core::AggregationNode>(plan)) {
+    return toSql(aggregationNode);
   }
-  return results;
+  if (const auto projectNode =
+          std::dynamic_pointer_cast<const core::ProjectNode>(plan)) {
+    return toSql(projectNode);
+  }
+  VELOX_NYI("Unsupported plan node: {}.", plan->toString());
 }
 
 std::multiset<std::vector<variant>> SparkQueryRunner::execute(
@@ -227,96 +193,49 @@ std::vector<RowVectorPtr> SparkQueryRunner::executeVector(
   // Write the input to a Parquet file.
   auto tempFile = exec::test::TempFilePath::create();
   const auto& filePath = tempFile->getPath();
-  // const auto filePath = "/tmp/test.parquet";
   auto writerPool = rootPool()->addAggregateChild("writer");
   writeToFile(filePath, input, writerPool.get());
 
-  // Run the query.
+  // Create temporary view 'tmp' in Spark by reading the generated Parquet file.
   execute(fmt::format(
       "CREATE OR REPLACE TEMPORARY VIEW tmp AS (SELECT * from parquet.`file://{}`);",
       filePath));
   return execute(sql);
 }
 
-std::optional<std::string> SparkQueryRunner::toSql(
-    const velox::core::PlanNodePtr& plan) {
-  if (const auto aggregationNode =
-          std::dynamic_pointer_cast<const core::AggregationNode>(plan)) {
-    return toSql(aggregationNode);
-  }
-  VELOX_NYI();
-}
+std::vector<RowVectorPtr> SparkQueryRunner::execute(
+    const std::string& content) {
+  auto sql = google::protobuf::Arena::CreateMessage<SQL>(&arena_);
+  sql->set_query(content);
 
-std::optional<std::string> SparkQueryRunner::toSql(
-    const std::shared_ptr<const core::AggregationNode>& aggregationNode) {
-  for (const auto& aggregate : aggregationNode->aggregates()) {
-    if (!aggregate.sortingKeys.empty()) {
-      return std::nullopt;
-    }
-    const auto functionName = aggregate.call->name();
-    if (functionName == "max_by" || functionName == "min_by") {
-      VELOX_CHECK_EQ(aggregate.rawInputTypes.size(), 2);
-      if (aggregate.rawInputTypes[1]->kind() == TypeKind::MAP) {
-        // Spark's `max_by` and `min_by` do not support ordering on map type.
-        return std::nullopt;
-      }
-    }
-    if (aggregate.distinct) {
-      for (const auto& inputType : aggregate.rawInputTypes) {
-        // In Spark, grouping/join/window partition keys cannot be map type.
-        if (inputType->kind() == TypeKind::MAP) {
-          return std::nullopt;
-        }
-      }
-    }
-  }
-  for (const auto& key : aggregationNode->groupingKeys()) {
-    // In Spark, grouping/join/window partition keys cannot be map type.
-    if (key->type()->kind() == TypeKind::MAP) {
-      return std::nullopt;
+  auto relation = google::protobuf::Arena::CreateMessage<Relation>(&arena_);
+  relation->set_allocated_sql(sql);
+
+  auto plan = google::protobuf::Arena::CreateMessage<Plan>(&arena_);
+  plan->set_allocated_root(relation);
+
+  auto context = google::protobuf::Arena::CreateMessage<UserContext>(&arena_);
+  context->set_user_id(kUserId);
+  context->set_user_name(kUserName);
+
+  auto request =
+      google::protobuf::Arena::CreateMessage<ExecutePlanRequest>(&arena_);
+  request->set_session_id(kSessionId);
+  request->set_allocated_user_context(context);
+  request->set_allocated_plan(plan);
+
+  grpc::ClientContext clientContext;
+  auto reader = stub_->ExecutePlan(&clientContext, *request);
+  ExecutePlanResponse response;
+  std::vector<RowVectorPtr> results;
+  while (reader->Read(&response)) {
+    if (response.session_id() == kSessionId && response.has_arrow_batch()) {
+      const std::string& data = response.arrow_batch().data();
+      const auto batchResults = readArrowData(data);
+      results.insert(results.end(), batchResults.begin(), batchResults.end());
     }
   }
-
-  // Assume plan is Aggregation over Values.
-  VELOX_CHECK(aggregationNode->step() == core::AggregationNode::Step::kSingle);
-
-  if (!isSupportedType(aggregationNode->sources()[0]->outputType())) {
-    return std::nullopt;
-  }
-
-  std::vector<std::string> groupingKeys;
-  for (const auto& key : aggregationNode->groupingKeys()) {
-    groupingKeys.push_back(key->name());
-  }
-
-  std::stringstream sql;
-  sql << "SELECT " << folly::join(", ", groupingKeys);
-
-  const auto& aggregates = aggregationNode->aggregates();
-  if (!aggregates.empty()) {
-    if (!groupingKeys.empty()) {
-      sql << ", ";
-    }
-
-    for (auto i = 0; i < aggregates.size(); ++i) {
-      appendComma(i, sql);
-      const auto& aggregate = aggregates[i];
-      sql << toAggregateCallSql(aggregate.call, aggregate.distinct);
-
-      if (aggregate.mask != nullptr) {
-        sql << " filter (where " << aggregate.mask->name() << ")";
-      }
-      sql << " as " << aggregationNode->aggregateNames()[i];
-    }
-  }
-
-  sql << " FROM tmp";
-
-  if (!groupingKeys.empty()) {
-    sql << " GROUP BY " << folly::join(", ", groupingKeys);
-  }
-
-  return sql.str();
+  return results;
 }
 
 std::vector<RowVectorPtr> SparkQueryRunner::readArrowData(
@@ -356,5 +275,114 @@ std::vector<RowVectorPtr> SparkQueryRunner::readArrowData(
       "Failed to read batch: {}.",
       batchResult.status().ToString());
   return results;
+}
+
+bool SparkQueryRunner::supported(
+    const std::shared_ptr<const core::AggregationNode>& aggregationNode) {
+  for (const auto& aggregate : aggregationNode->aggregates()) {
+    // Spark aggregation does not support sort keys.
+    if (!aggregate.sortingKeys.empty()) {
+      return false;
+    }
+    const auto functionName = aggregate.call->name();
+    if (functionName == "max_by" || functionName == "min_by") {
+      VELOX_CHECK_EQ(aggregate.rawInputTypes.size(), 2);
+      if (aggregate.rawInputTypes[1]->kind() == TypeKind::MAP) {
+        // Spark's `max_by` and `min_by` do not support ordering on map type.
+        return false;
+      }
+    }
+    if (aggregate.distinct) {
+      for (const auto& inputType : aggregate.rawInputTypes) {
+        // In Spark, grouping keys cannot be map type.
+        if (inputType->kind() == TypeKind::MAP) {
+          return false;
+        }
+      }
+    }
+  }
+  for (const auto& key : aggregationNode->groupingKeys()) {
+    // In Spark, grouping keys cannot be map type.
+    if (key->type()->kind() == TypeKind::MAP) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::optional<std::string> SparkQueryRunner::toSql(
+    const std::shared_ptr<const core::AggregationNode>& aggregationNode) {
+  if (!supported(aggregationNode)) {
+    return std::nullopt;
+  }
+
+  // Assume plan is Aggregation over Values.
+  VELOX_CHECK(aggregationNode->step() == core::AggregationNode::Step::kSingle);
+
+  std::vector<std::string> groupingKeys;
+  for (const auto& key : aggregationNode->groupingKeys()) {
+    groupingKeys.push_back(key->name());
+  }
+
+  std::stringstream sql;
+  sql << "SELECT " << folly::join(", ", groupingKeys);
+
+  const auto& aggregates = aggregationNode->aggregates();
+  if (!aggregates.empty()) {
+    if (!groupingKeys.empty()) {
+      sql << ", ";
+    }
+
+    for (auto i = 0; i < aggregates.size(); ++i) {
+      appendComma(i, sql);
+      const auto& aggregate = aggregates[i];
+      sql << toAggregateCallSql(aggregate.call, aggregate.distinct);
+
+      if (aggregate.mask != nullptr) {
+        sql << " filter (where " << aggregate.mask->name() << ")";
+      }
+      sql << " as " << aggregationNode->aggregateNames()[i];
+    }
+  }
+
+  sql << " FROM tmp";
+
+  if (!groupingKeys.empty()) {
+    sql << " GROUP BY " << folly::join(", ", groupingKeys);
+  }
+
+  return sql.str();
+}
+
+std::optional<std::string> SparkQueryRunner::toSql(
+    const std::shared_ptr<const core::ProjectNode>& projectNode) {
+  auto sourceSql = toSql(projectNode->sources()[0]);
+  if (!sourceSql.has_value()) {
+    return std::nullopt;
+  }
+
+  std::stringstream sql;
+  sql << "SELECT ";
+
+  for (auto i = 0; i < projectNode->names().size(); ++i) {
+    appendComma(i, sql);
+    auto projection = projectNode->projections()[i];
+    if (auto field =
+            std::dynamic_pointer_cast<const core::FieldAccessTypedExpr>(
+                projection)) {
+      sql << field->name();
+    } else if (
+        auto call =
+            std::dynamic_pointer_cast<const core::CallTypedExpr>(projection)) {
+      sql << toCallSql(call);
+    } else {
+      VELOX_NYI();
+    }
+
+    sql << " as " << projectNode->names()[i];
+  }
+
+  sql << " FROM (" << sourceSql.value() << ")";
+  return sql.str();
 }
 } // namespace facebook::velox::functions::sparksql::fuzzer

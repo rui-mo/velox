@@ -521,8 +521,7 @@ void AggregationFuzzerBase::compare(
   if (!customVerification) {
     VELOX_CHECK(
         assertEqualResults({expected.result}, {actual.result}),
-        "Logically equivalent plans produced different results, seed: {}",
-        currentSeed_);
+        "Logically equivalent plans produced different results");
     return;
   }
 

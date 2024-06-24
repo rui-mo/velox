@@ -59,7 +59,7 @@ function install_velox_deps_from_dnf {
   dnf_install libevent-devel \
     openssl-devel re2-devel libzstd-devel lz4-devel double-conversion-devel \
     libdwarf-devel elfutils-libelf-devel curl-devel libicu-devel bison flex \
-    libsodium-devel zlib-devel
+    libsodium-devel zlib-devel go
 
   # install sphinx for doc gen
   pip install sphinx sphinx-tabs breathe sphinx_rtd_theme
@@ -219,26 +219,6 @@ function install_cuda {
   # See https://developer.nvidia.com/cuda-downloads
   dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel9/x86_64/cuda-rhel9.repo
   dnf install -y cuda-nvcc-$(echo $1 | tr '.' '-') cuda-cudart-devel-$(echo $1 | tr '.' '-')
-}
-
-function install_grpc {
-  git clone https://github.com/grpc/grpc.git --branch v1.50.0 --single-branch
-  (
-    cd grpc
-    git submodule update --init
-    mkdir -p cmake/build
-    cd cmake/build
-    cmake ../.. -DgRPC_INSTALL=ON              \
-              -DCMAKE_BUILD_TYPE=Release       \
-              -DgRPC_ABSL_PROVIDER=module      \
-              -DgRPC_CARES_PROVIDER=module     \
-              -DgRPC_PROTOBUF_PROVIDER=module  \
-              -DgRPC_RE2_PROVIDER=package      \
-              -DgRPC_SSL_PROVIDER=package      \
-              -DgRPC_ZLIB_PROVIDER=package
-    make "-j$(nproc)"
-    $SUDO make install
-  )
 }
 
 function install_velox_deps {

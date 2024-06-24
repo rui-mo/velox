@@ -69,10 +69,10 @@ target_link_libraries(
   ZLIB::ZLIB
   re2::re2
   gRPC::address_sorting
-  cares::cares
+  c-ares::cares
   gRPC::upb
-  boringssl::ssl
-  boringssl::crypto
+  OpenSSL::SSL
+  OpenSSL::Crypto
   absl::statusor
   absl::status
   absl::cordz_info

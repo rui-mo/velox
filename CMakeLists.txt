@@ -14,6 +14,8 @@
 cmake_minimum_required(VERSION 3.28)
 message(STATUS "Building using CMake version: ${CMAKE_VERSION}")
 
+set(BUILD_SHARED_LIBS OFF)
+
 # The policy allows us to change options without caching.
 cmake_policy(SET CMP0077 NEW)
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
@@ -331,7 +333,8 @@ if("${ENABLE_ALL_WARNINGS}")
          -Wno-maybe-uninitialized \
          -Wno-unused-result \
          -Wno-format-overflow \
-         -Wno-strict-aliasing")
+         -Wno-strict-aliasing \
+         -Wno-mismatched-new-delete")
   endif()
 
   set(KNOWN_WARNINGS
@@ -339,7 +342,7 @@ if("${ENABLE_ALL_WARNINGS}")
        -Wno-unused-parameter \
        -Wno-sign-compare \
        -Wno-ignored-qualifiers \
-       -Wnon-virtual-dtor \
+       -Wno-non-virtual-dtor \
        ${KNOWN_COMPILER_SPECIFIC_WARNINGS}")
 
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra ${KNOWN_WARNINGS}")
@@ -456,18 +459,15 @@ add_compile_definitions(FOLLY_HAVE_INT128_T=1)
 set_source(folly)
 resolve_dependency(folly)
 
-# Spark qury runner depends on absl, c-ares, grpc and boringssl.
+# Spark qury runner depends on absl, c-ares, grpc.
 set_source(absl)
 resolve_dependency(absl 20240116 EXACT)
 
-set_source(cares)
-resolve_dependency(cares 1.17.2 EXACT)
+set_source(c-ares)
+resolve_dependency(c-ares)
 
 set_source(gRPC)
 resolve_dependency(gRPC 1.48.1 EXACT)
-
-set_source(boringssl)
-resolve_dependency(boringssl)
 
 if(VELOX_ENABLE_REMOTE_FUNCTIONS)
   # TODO: Move this to use resolve_dependency(). For some reason, FBThrift
@@ -477,11 +477,7 @@ if(VELOX_ENABLE_REMOTE_FUNCTIONS)
   find_package(FBThrift CONFIG REQUIRED)
 endif()
 
-if(DEFINED FOLLY_BENCHMARK_STATIC_LIB)
-  set(FOLLY_BENCHMARK ${FOLLY_BENCHMARK_STATIC_LIB})
-else()
-  set(FOLLY_BENCHMARK Folly::follybenchmark)
-endif()
+set(FOLLY_BENCHMARK Folly::follybenchmark)
 
 if(VELOX_ENABLE_GCS)
   set_source(google_cloud_cpp_storage)

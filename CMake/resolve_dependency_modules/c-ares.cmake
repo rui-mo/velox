@@ -25,7 +25,7 @@ resolve_dependency_url(CARES)
 message(STATUS "Building C-ARES from source")
 
 FetchContent_Declare(
-  cares
+  c-ares
   URL ${VELOX_CARES_SOURCE_URL}
   URL_HASH ${VELOX_CARES_BUILD_SHA256_CHECKSUM}
   OVERRIDE_FIND_PACKAGE EXCLUDE_FROM_ALL SYSTEM)
@@ -33,5 +33,7 @@ FetchContent_Declare(
 set(CARES_STATIC ON)
 set(CARES_INSTALL ON)
 set(CARES_SHARED OFF)
-FetchContent_MakeAvailable(cares)
-add_library(cares::cares ALIAS c-ares)
+FetchContent_MakeAvailable(c-ares)
+if(NOT TARGET c-ares::cares)
+  add_library(c-ares::cares ALIAS c-ares)
+endif()
