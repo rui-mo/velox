@@ -278,22 +278,28 @@ class DecimalUtil {
       uint8_t /*bRescale*/) {
     VELOX_USER_CHECK_NE(b, 0, "Division by zero");
     int resultSign = 1;
-    using IntermediateType =
-        std::conditional_t<std::is_same_v<A, velox::int128_t>, A, R>;
-    IntermediateType unsignedDividendRescaled(a);
+    int128_t unsignedDividendRescaled(a);
     if (a < 0) {
       resultSign = -1;
       unsignedDividendRescaled *= -1;
     }
-    B unsignedDivisor(b);
+    int128_t unsignedDivisor(b);
     if (b < 0) {
       resultSign *= -1;
       unsignedDivisor *= -1;
     }
-    unsignedDividendRescaled = checkedMultiply<IntermediateType>(
+    unsignedDividendRescaled = checkedMultiply<int128_t>(
         unsignedDividendRescaled,
-        IntermediateType(DecimalUtil::kPowersOfTen[aRescale]),
+        DecimalUtil::kPowersOfTen[aRescale],
         "Decimal");
+    if constexpr (std::is_same_v<R, int64_t>) {
+      if (unsignedDividendRescaled / unsignedDivisor > std::numeric_limits<int64_t>::max()) {
+        VELOX_USER_FAIL(
+            "The rescaled value {} overflows for bigint type.",
+            std::to_string(unsignedDividendRescaled));
+      }
+    }
+
     R quotient = unsignedDividendRescaled / unsignedDivisor;
     R remainder = unsignedDividendRescaled % unsignedDivisor;
     if (!noRoundUp && static_cast<const B>(remainder) * 2 >= unsignedDivisor) {
