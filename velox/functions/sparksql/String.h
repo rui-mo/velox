@@ -295,58 +295,56 @@ struct EndsWithFunction {
 /// locate function
 /// locate(string, string) -> integer
 /// locate(string, string, integer) -> integer
+///
 /// Returns the position of the first occurrence of the first string in the
 /// second string after the give position.
 template <typename T>
 struct LocateFunction {
   VELOX_DEFINE_FUNCTION_TYPES(T);
 
-  FOLLY_ALWAYS_INLINE bool doCall(
+  FOLLY_ALWAYS_INLINE bool call(
       out_type<int32_t>& result,
-      const arg_type<Varchar>* substr,
-      const arg_type<Varchar>* str,
-      int32_t start) {
-    if (substr->size() == 0) {
-      result = 1;
-      return true;
-    }
-    const auto found =
-        (*str).str().find((*substr).data(), start - 1, (*substr).size());
-    if (found != std::string::npos) {
-      result = found + 1;
-    } else {
-      result = 0;
-    }
+      const arg_type<Varchar>& subString,
+      const arg_type<Varchar>& string) {
+    result =
+        stringImpl::stringPosition<false /*isAscii*/>(string, subString, 1, 1);
+    return true;
+  }
+
+  FOLLY_ALWAYS_INLINE bool callAscii(
+      out_type<int32_t>& result,
+      const arg_type<Varchar>& subString,
+      const arg_type<Varchar>& string) {
+    result =
+        stringImpl::stringPosition<true /*isAscii*/>(string, subString, 1, 1);
+    return true;
+  }
+
+  FOLLY_ALWAYS_INLINE bool callAscii(
+      out_type<int32_t>& result,
+      const arg_type<Varchar>& subString,
+      const arg_type<Varchar>& string,
+      const arg_type<int32_t>& start) {
+    result = stringImpl::stringPosition<true /*isAscii*/>(
+        string, subString, 1, start);
     return true;
   }
 
   FOLLY_ALWAYS_INLINE bool callNullable(
       out_type<int32_t>& result,
-      const arg_type<Varchar>* substr,
-      const arg_type<Varchar>* str) {
-    if (substr == nullptr || str == nullptr) {
-      return false;
-    }
-    return doCall(result, substr, str, 1);
-  }
-
-  FOLLY_ALWAYS_INLINE bool callNullable(
-      out_type<int32_t>& result,
-      const arg_type<Varchar>* substr,
-      const arg_type<Varchar>* str,
+      const arg_type<Varchar>* subString,
+      const arg_type<Varchar>* string,
       const arg_type<int32_t>* start) {
     if (start == nullptr) {
       result = 0;
       return true;
     }
-    if (substr == nullptr || str == nullptr) {
+    if (subString == nullptr || string == nullptr) {
       return false;
     }
-    if (*start < 1) {
-      result = 0;
-      return true;
-    }
-    return doCall(result, substr, str, *start);
+    result = stringImpl::stringPosition<false /*isAscii*/>(
+        *string, *subString, 1, *start);
+    return true;
   }
 };
 

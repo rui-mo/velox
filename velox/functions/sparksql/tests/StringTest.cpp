@@ -745,8 +745,8 @@ TEST_F(StringTest, locate) {
   const auto locate = [&](const std::optional<std::string>& substr,
                           const std::optional<std::string>& str,
                           const std::optional<int32_t>& start = std::nullopt,
-                          bool needStart = false) {
-    if (!start.has_value() && !needStart) {
+                          bool withStart = false) {
+    if (!start.has_value() && !withStart) {
       return evaluateOnce<int32_t>("locate(c0, c1)", substr, str);
     }
     return evaluateOnce<int32_t>("locate(c0, c1, c2)", substr, str, start);
@@ -759,6 +759,7 @@ TEST_F(StringTest, locate) {
   EXPECT_EQ(locate("aa", "aaads", -3), 0);
   EXPECT_EQ(locate("de", "aaads"), 0);
   EXPECT_EQ(locate("de", "aaads", 2), 0);
+  EXPECT_EQ(locate("abc", "abcdddabcabc", 6), 7);
   EXPECT_EQ(locate("", ""), 1);
   EXPECT_EQ(locate("", "", 3), 1);
   EXPECT_EQ(locate("", "aaads"), 1);
@@ -770,6 +771,11 @@ TEST_F(StringTest, locate) {
   EXPECT_EQ(locate(std::nullopt, "aaads"), std::nullopt);
   EXPECT_EQ(locate(std::nullopt, std::nullopt, -1), std::nullopt);
   EXPECT_EQ(locate(std::nullopt, std::nullopt, std::nullopt, true), 0);
+  
+  EXPECT_EQ(locate("\u7231", "\u4FE1\u5FF5,\u7231,\u5E0C\u671B"), 4);
+  EXPECT_EQ(locate("\u7231", "\u4FE1\u5FF5,\u7231,\u5E0C\u671B", 0), 0);
+  EXPECT_EQ(locate("\u4FE1", "\u4FE1\u5FF5,\u4FE1\u7231,\u4FE1\u5E0C\u671B", 2), 4);
+  EXPECT_EQ(locate("\u4FE1", "\u4FE1\u5FF5,\u4FE1\u7231,\u4FE1\u5E0C\u671B", 8), 0); 
 }
 
 TEST_F(StringTest, substringIndex) {
