@@ -1138,6 +1138,80 @@ struct ReplaceFunction {
 };
 
 template <typename T>
+struct MaskFunction {
+  VELOX_DEFINE_FUNCTION_TYPES(T);
+
+  // FOLLY_ALWAYS_INLINE void initialize(
+  //     const std::vector<TypePtr>& /*inputTypes*/,
+  //     const core::QueryConfig& config,
+  //     const arg_type<Varchar>* /*input*/,
+  //     const arg_type<Varchar>* upperChar,
+  //     const arg_type<Varchar>* lowerChar,
+  //     const arg_type<Varchar>* digitChar,
+  //     const arg_type<Varchar>* otherChar) {
+  // }
+
+  FOLLY_ALWAYS_INLINE bool callNullable(
+      out_type<Varchar>& result,
+      const arg_type<Varchar>* inputPtr,
+      const arg_type<Varchar>* upperCharPtr,
+      const arg_type<Varchar>* lowerCharPtr,
+      const arg_type<Varchar>* digitCharPtr,
+      const arg_type<Varchar>* otherCharPtr) {
+    if (inputPtr == nullptr) {
+      return false;
+    }
+
+    const auto upperChar = getChar(upperCharPtr);
+    const auto lowerChar = getChar(lowerCharPtr);
+    const auto digitChar = getChar(digitCharPtr);
+    const auto otherChar = getChar(otherCharPtr);
+    doCall(result, *inputPtr, upperChar, lowerChar, digitChar, otherChar);
+    return true;
+  }
+
+ private:
+  void doCall(
+      out_type<Varchar>& result,
+      StringView input,
+      const std::optional<char> upperChar,
+      const std::optional<char> lowerChar,
+      const std::optional<char> digitChar,
+      const std::optional<char> otherChar) const {
+    result.reserve(input.size());
+    for (auto i = 0; i < input.size(); ++i) {
+      char masked = input.data()[i];
+      if (isupper(masked) && upperChar.has_value()) {
+        masked = upperChar.value();
+      } else if (islower(masked) && lowerChar.has_value()) {
+        masked = lowerChar.value();
+      } else if (isdigit(masked) && digitChar.has_value()) {
+        masked = digitChar.value();
+      } else if (
+          !isupper(masked) && !islower(masked) && !isdigit(masked) &&
+          otherChar.has_value()) {
+        masked = otherChar.value();
+      }
+      result.data()[i] = masked;
+    }
+    result.resize(input.size());
+  }
+
+  std::optional<char> getChar(const arg_type<Varchar>* arg) {
+    if (arg) {
+      VELOX_USER_CHECK_EQ(
+          arg->size(), 1, "Length of replacing char should be 1");
+      return arg->data()[0];
+    }
+    return std::nullopt;
+  }
+
+  static constexpr char kMaskedUpperCase_ = 'X';
+  static constexpr char kMaskedLowerCase_ = 'x';
+  static constexpr char kMaskedDigit_ = 'n';
+};
+
+template <typename T>
 struct FindInSetFunction {
   VELOX_DEFINE_FUNCTION_TYPES(T);
 

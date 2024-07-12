@@ -318,6 +318,15 @@ void registerFunctions(const std::string& prefix) {
   registerFunction<ReplaceFunction, Varchar, Varchar, Varchar, Varchar>(
       {prefix + "replace"});
 
+  registerFunction<
+      MaskFunction,
+      Varchar,
+      Varchar,
+      Varchar,
+      Varchar,
+      Varchar,
+      Varchar>({prefix + "mask"});
+
   registerFunction<FindInSetFunction, int32_t, Varchar, Varchar>(
       {prefix + "find_in_set"});
 
