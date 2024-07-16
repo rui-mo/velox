@@ -230,6 +230,30 @@ TEST_F(SparkCastExprTest, stringToTimestamp) {
   testCast<std::string, Timestamp>("timestamp", input, expected);
 }
 
+TEST_F(SparkCastExprTest, unsupported) {
+  // https://github.com/apache/spark/blob/master/sql/catalyst/src/test/scala/org/apache/spark/sql/catalyst/expressions/CastSuiteBase.scala#L127-L213
+  for (auto str :
+       {"2015",
+        "2015-03",
+        "2015-03-18T12:03:17Z",
+        "2015-03-18 12:03:17Z",
+        "2015-03-18T12:03:17-1:0",
+        "2015-03-18T12:03:17-01:00",
+        "2015-03-18T12:03:17+07:30",
+        "2015-03-18T12:03:17+7:3",
+        "2015-03-18T12:03:17.456Z",
+        "2015-03-18 12:03:17.456Z",
+        "2015-03-18T12:03:17.123-1:0",
+        "2015-03-18T12:03:17.123-01:00",
+        "2015-03-18T12:03:17.123+07:30",
+        "2015-03-18T12:03:17.123+7:3"}) {
+    testInvalidCast<std::string>(
+        "timestamp",
+        {str},
+        fmt::format("Cannot cast VARCHAR '{}' to TIMESTAMP.", str));
+  }
+}
+
 TEST_F(SparkCastExprTest, primitiveInvalidCornerCases) {
   // To integer.
   {
