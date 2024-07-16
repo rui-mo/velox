@@ -73,63 +73,6 @@ target_link_libraries(
   gRPC::upb
   OpenSSL::SSL
   OpenSSL::Crypto
-  absl::statusor
-  absl::status
-  absl::cordz_info
-  absl::cord
-  absl::symbolize
-  absl::demangle_internal
-  absl::flags_parse
-  absl::cord_internal
-  absl::bad_optional_access
-  absl::throw_delegate
-  absl::bad_variant_access
-  absl::random_internal_pool_urbg
-  absl::random_internal_randen
-  absl::random_internal_seed_material
-  absl::random_seed_gen_exception
-  absl::random_internal_randen_hwaes
-  absl::random_internal_randen_slow
-  absl::graphcycles_internal
-  absl::kernel_timeout_internal
-  absl::base
-  absl::malloc_internal
-  absl::examine_stack
-  absl::debugging_internal
-  absl::exponential_biased
-  absl::cordz_handle
-  absl::log_severity
-  absl::stacktrace
-  absl::time
-  absl::cordz_functions
-  absl::raw_logging_internal
-  absl::str_format_internal
-  absl::strerror
-  absl::crc_cord_state
-  absl::crc32c
-  absl::crc_internal
-  absl::strings
-  absl::strings_internal
-  absl::raw_hash_set
-  absl::hashtablez_sampler
-  absl::hash
-  absl::city
-  absl::int128
-  absl::low_level_hash
-  absl::random_internal_randen_hwaes_impl
-  absl::random_internal_platform
-  absl::flags_internal
-  absl::flags_usage_internal
-  absl::flags_reflection
-  absl::flags_commandlineflag
-  absl::flags_private_handle_accessor
-  absl::flags_commandlineflag_internal
-  absl::flags_config
-  absl::flags_program_name
-  absl::flags_marshalling
-  absl::synchronization
-  absl::time_zone
-  absl::spinlock_wait
   pthread
   arrow
   lz4::lz4
