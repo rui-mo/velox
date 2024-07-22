@@ -58,6 +58,8 @@ struct AggregationFuzzerOptions {
   /// Could be used to specify timezone or enable/disable settings that
   /// affect semantics of individual aggregate functions.
   std::unordered_map<std::string, std::string> queryConfigs;
+
+  std::unordered_map<std::string, std::string> hiveConfigs;
 };
 
 } // namespace facebook::velox::exec::test

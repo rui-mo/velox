@@ -22,11 +22,10 @@
 #include "arrow/ipc/api.h"
 #include "arrow/result.h"
 #include "arrow/status.h"
-#include "grpc++/create_channel.h"
-#include "grpc++/security/credentials.h"
 #include "grpc/grpc.h"
 #include "velox/common/base/Fs.h"
 #include "velox/dwio/common/WriterFactory.h"
+#include "velox/dwio/parquet/writer/Writer.h"
 #include "velox/exec/tests/utils/QueryAssertions.h"
 #include "velox/exec/tests/utils/TempFilePath.h"
 #include "velox/functions/sparksql/fuzzer/SparkQueryRunner.h"
@@ -45,12 +44,12 @@ void writeToFile(
     memory::MemoryPool* pool) {
   VELOX_CHECK_GT(data.size(), 0);
 
-  auto options = std::make_shared<dwio::common::WriterOptions>();
+  auto options = std::make_shared<parquet::WriterOptions>();
   options->schema = data[0]->type();
   options->memoryPool = pool;
   // Spark does not recognize int64-timestamp written as nano precision in
   // Parquet.
-  options->parquetWriteTimestampUnit = 6 /*kMirco*/;
+  options->parquetWriteTimestampUnit = TimestampUnit::kMicro;
 
   auto writeFile = std::make_unique<LocalWriteFile>(path, true, false);
   auto sink =
@@ -139,12 +138,6 @@ std::string toAggregateCallSql(
 }
 } // namespace
 
-SparkQueryRunner::SparkQueryRunner(const std::string& coordinatorUri) {
-  std::shared_ptr<grpc::Channel> channel =
-      grpc::CreateChannel(coordinatorUri, grpc::InsecureChannelCredentials());
-  stub_ = spark::connect::SparkConnectService::NewStub(channel);
-}
-
 std::optional<std::string> SparkQueryRunner::toSql(
     const velox::core::PlanNodePtr& plan) {
   if (const auto aggregationNode =
@@ -215,12 +208,12 @@ std::vector<RowVectorPtr> SparkQueryRunner::execute(
   plan->set_allocated_root(relation);
 
   auto context = google::protobuf::Arena::CreateMessage<UserContext>(&arena_);
-  context->set_user_id(kUserId);
-  context->set_user_name(kUserName);
+  context->set_user_id(userId_);
+  context->set_user_name(userName_);
 
   auto request =
       google::protobuf::Arena::CreateMessage<ExecutePlanRequest>(&arena_);
-  request->set_session_id(kSessionId);
+  request->set_session_id(sessionId_);
   request->set_allocated_user_context(context);
   request->set_allocated_plan(plan);
 
@@ -229,13 +222,27 @@ std::vector<RowVectorPtr> SparkQueryRunner::execute(
   ExecutePlanResponse response;
   std::vector<RowVectorPtr> results;
   while (reader->Read(&response)) {
-    if (response.session_id() == kSessionId && response.has_arrow_batch()) {
+    if (response.session_id() == sessionId_ && response.has_arrow_batch()) {
       const std::string& data = response.arrow_batch().data();
       const auto batchResults = readArrowData(data);
       results.insert(results.end(), batchResults.begin(), batchResults.end());
     }
   }
   return results;
+}
+
+std::string SparkQueryRunner::generateUUID() {
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_int_distribution<> dis(0, 15);
+  std::stringstream ss;
+  ss << std::hex;
+  for (int i = 0; i < 32; i++) {
+    ss << "0123456789abcdef"[dis(gen)];
+    if (i == 7 || i == 11 || i == 15 || i == 19)
+      ss << "-";
+  }
+  return ss.str();
 }
 
 std::vector<RowVectorPtr> SparkQueryRunner::readArrowData(
@@ -283,14 +290,6 @@ bool SparkQueryRunner::supported(
     // Spark aggregation does not support sort keys.
     if (!aggregate.sortingKeys.empty()) {
       return false;
-    }
-    const auto functionName = aggregate.call->name();
-    if (functionName == "max_by" || functionName == "min_by") {
-      VELOX_CHECK_EQ(aggregate.rawInputTypes.size(), 2);
-      if (aggregate.rawInputTypes[1]->kind() == TypeKind::MAP) {
-        // Spark's `max_by` and `min_by` do not support ordering on map type.
-        return false;
-      }
     }
     if (aggregate.distinct) {
       for (const auto& inputType : aggregate.rawInputTypes) {

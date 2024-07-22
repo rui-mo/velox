@@ -23,7 +23,6 @@
 #include "velox/functions/sparksql/Register.h"
 #include "velox/functions/sparksql/aggregates/Register.h"
 #include "velox/functions/sparksql/fuzzer/SparkQueryRunner.h"
-#include "velox/functions/sparksql/window/WindowFunctionsRegistration.h"
 #include "velox/parse/TypeResolver.h"
 #include "velox/vector/tests/utils/VectorTestBase.h"
 
@@ -50,8 +49,8 @@ class SparkQueryRunnerTest : public ::testing::Test,
 // This test requires a Spark Coordinator running at localhost, so disable it
 // by default.
 TEST_F(SparkQueryRunnerTest, DISABLED_basic) {
-  auto queryRunner =
-      std::make_unique<fuzzer::SparkQueryRunner>("localhost:15002");
+  auto queryRunner = std::make_unique<fuzzer::SparkQueryRunner>(
+      "localhost:15002", "test", "basic");
 
   auto input = makeRowVector({
       makeConstant<int64_t>(1, 25),
@@ -94,8 +93,8 @@ TEST_F(SparkQueryRunnerTest, DISABLED_fuzzer) {
                   .project({"a0", "array_sort(a1)"})
                   .planNode();
 
-  auto queryRunner =
-      std::make_unique<fuzzer::SparkQueryRunner>("localhost:15002");
+  auto queryRunner = std::make_unique<fuzzer::SparkQueryRunner>(
+      "localhost:15002", "test", "fuzzer");
   auto sql = queryRunner->toSql(plan);
   ASSERT_TRUE(sql.has_value());
 
@@ -108,7 +107,8 @@ TEST_F(SparkQueryRunnerTest, DISABLED_fuzzer) {
 }
 
 TEST_F(SparkQueryRunnerTest, distinctAggregation) {
-  auto queryRunner = std::make_unique<fuzzer::SparkQueryRunner>("unused");
+  auto queryRunner =
+      std::make_unique<fuzzer::SparkQueryRunner>("unused", "unused", "unused");
 
   auto data =
       makeRowVector({makeFlatVector<int64_t>({}), makeFlatVector<int64_t>({})});
@@ -124,7 +124,8 @@ TEST_F(SparkQueryRunnerTest, distinctAggregation) {
 }
 
 TEST_F(SparkQueryRunnerTest, toSql) {
-  auto queryRunner = std::make_unique<fuzzer::SparkQueryRunner>("unused");
+  auto queryRunner =
+      std::make_unique<fuzzer::SparkQueryRunner>("unused", "unused", "unused");
   auto dataType = ROW({"c0", "c1", "c2"}, {DOUBLE(), DOUBLE(), BOOLEAN()});
 
   auto plan = exec::test::PlanBuilder()

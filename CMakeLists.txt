@@ -108,7 +108,7 @@ option(VELOX_ENABLE_S3 "Build S3 Connector" OFF)
 option(VELOX_ENABLE_GCS "Build GCS Connector" OFF)
 option(VELOX_ENABLE_ABFS "Build Abfs Connector" OFF)
 option(VELOX_ENABLE_HDFS "Build Hdfs Connector" OFF)
-option(VELOX_ENABLE_PARQUET "Enable Parquet support" ON)
+option(VELOX_ENABLE_PARQUET "Enable Parquet support" OFF)
 option(VELOX_ENABLE_ARROW "Enable Arrow support" OFF)
 option(VELOX_ENABLE_REMOTE_FUNCTIONS "Enable remote function support" OFF)
 option(VELOX_ENABLE_CCACHE "Use ccache if installed." ON)
@@ -154,6 +154,7 @@ if(${VELOX_BUILD_TESTING})
   set(VELOX_ENABLE_TPCH_CONNECTOR ON)
   set(VELOX_ENABLE_SPARK_FUNCTIONS ON)
   set(VELOX_ENABLE_EXAMPLES ON)
+  set(VELOX_ENABLE_PARQUET ON)
 endif()
 
 if(${VELOX_ENABLE_BENCHMARKS})
@@ -333,8 +334,7 @@ if("${ENABLE_ALL_WARNINGS}")
          -Wno-maybe-uninitialized \
          -Wno-unused-result \
          -Wno-format-overflow \
-         -Wno-strict-aliasing \
-         -Wno-mismatched-new-delete")
+         -Wno-strict-aliasing")
   endif()
 
   set(KNOWN_WARNINGS
@@ -342,7 +342,6 @@ if("${ENABLE_ALL_WARNINGS}")
        -Wno-unused-parameter \
        -Wno-sign-compare \
        -Wno-ignored-qualifiers \
-       -Wno-non-virtual-dtor \
        ${KNOWN_COMPILER_SPECIFIC_WARNINGS}")
 
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra ${KNOWN_WARNINGS}")
@@ -459,15 +458,17 @@ add_compile_definitions(FOLLY_HAVE_INT128_T=1)
 set_source(folly)
 resolve_dependency(folly)
 
-# Spark qury runner depends on absl, c-ares, grpc.
-set_source(absl)
-resolve_dependency(absl 20240116 EXACT)
+if(${VELOX_BUILD_TESTING})
+  # Spark qury runner depends on absl, gRPC. gRPC depends on c-ares.
+  set_source(absl)
+  resolve_dependency(absl)
 
-set_source(c-ares)
-resolve_dependency(c-ares)
+  set_source(c-ares)
+  resolve_dependency(c-ares)
 
-set_source(gRPC)
-resolve_dependency(gRPC 1.48.1 EXACT)
+  set_source(gRPC)
+  resolve_dependency(gRPC)
+endif()
 
 if(VELOX_ENABLE_REMOTE_FUNCTIONS)
   # TODO: Move this to use resolve_dependency(). For some reason, FBThrift

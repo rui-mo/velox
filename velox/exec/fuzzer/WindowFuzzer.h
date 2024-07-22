@@ -40,8 +40,9 @@ class WindowFuzzer : public AggregationFuzzerBase {
       const std::unordered_set<std::string>& orderDependentFunctions,
       VectorFuzzer::Options::TimestampPrecision timestampPrecision,
       const std::unordered_map<std::string, std::string>& queryConfigs,
+      const std::unordered_map<std::string, std::string>& hiveConfigs,
       std::unique_ptr<ReferenceQueryRunner> referenceQueryRunner)
-      : AggregationFuzzerBase{seed, customVerificationFunctions, customInputGenerators, timestampPrecision, queryConfigs, std::move(referenceQueryRunner)},
+      : AggregationFuzzerBase{seed, customVerificationFunctions, customInputGenerators, timestampPrecision, queryConfigs, hiveConfigs, std::move(referenceQueryRunner)},
         orderDependentFunctions_{orderDependentFunctions} {
     VELOX_CHECK(
         !aggregationSignatureMap.empty() || !windowSignatureMap.empty(),
@@ -147,6 +148,7 @@ void windowFuzzer(
     const std::unordered_set<std::string>& orderDependentFunctions,
     VectorFuzzer::Options::TimestampPrecision timestampPrecision,
     const std::unordered_map<std::string, std::string>& queryConfigs,
+    const std::unordered_map<std::string, std::string>& hiveConfigs,
     const std::optional<std::string>& planPath,
     std::unique_ptr<ReferenceQueryRunner> referenceQueryRunner);
 

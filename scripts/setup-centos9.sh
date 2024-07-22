@@ -59,7 +59,7 @@ function install_velox_deps_from_dnf {
   dnf_install libevent-devel \
     openssl-devel re2-devel libzstd-devel lz4-devel double-conversion-devel \
     libdwarf-devel elfutils-libelf-devel curl-devel libicu-devel bison flex \
-    libsodium-devel zlib-devel go
+    libsodium-devel zlib-devel
 
   # install sphinx for doc gen
   pip install sphinx sphinx-tabs breathe sphinx_rtd_theme

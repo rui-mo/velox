@@ -63,6 +63,7 @@ class AggregationFuzzerBase {
           customInputGenerators,
       VectorFuzzer::Options::TimestampPrecision timestampPrecision,
       const std::unordered_map<std::string, std::string>& queryConfigs,
+      const std::unordered_map<std::string, std::string>& hiveConfigs,
       std::unique_ptr<ReferenceQueryRunner> referenceQueryRunner)
       : customVerificationFunctions_{customVerificationFunctions},
         customInputGenerators_{customInputGenerators},
@@ -72,15 +73,14 @@ class AggregationFuzzerBase {
         referenceQueryRunner_{std::move(referenceQueryRunner)},
         vectorFuzzer_{getFuzzerOptions(timestampPrecision), pool_.get()} {
     filesystems::registerLocalFileSystem();
+    auto configs = hiveConfigs;
     // Make sure not to run out of open file descriptors.
-    const std::unordered_map<std::string, std::string> hiveConfig = {
-        {connector::hive::HiveConfig::kNumCacheFileHandles, "1000"}};
+    configs[connector::hive::HiveConfig::kNumCacheFileHandles] = "1000";
     auto hiveConnector =
         connector::getConnectorFactory(
             connector::hive::HiveConnectorFactory::kHiveConnectorName)
             ->newConnector(
-                kHiveConnectorId,
-                std::make_shared<core::MemConfig>(hiveConfig));
+                kHiveConnectorId, std::make_shared<core::MemConfig>(configs));
     connector::registerConnector(hiveConnector);
 
     seed(initialSeed);

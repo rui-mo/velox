@@ -17,6 +17,8 @@
 
 #include "grpc++/channel.h"
 #include "grpc++/client_context.h"
+#include "grpc++/create_channel.h"
+#include "grpc++/security/credentials.h"
 #include "velox/common/memory/Memory.h"
 #include "velox/exec/fuzzer/ReferenceQueryRunner.h"
 #include "velox/functions/sparksql/fuzzer/proto/spark/connect/base.grpc.pb.h"
@@ -30,7 +32,16 @@ namespace facebook::velox::functions::sparksql::fuzzer {
 class SparkQueryRunner : public velox::exec::test::ReferenceQueryRunner {
  public:
   /// @param coordinatorUri Spark connect server endpoint, e.g. localhost:15002.
-  SparkQueryRunner(const std::string& coordinatorUri);
+  SparkQueryRunner(
+      const std::string& coordinatorUri,
+      const std::string& userId,
+      const std::string& userName)
+      : userId_(userId),
+        userName_(userName),
+        sessionId_(generateUUID()),
+        stub_(spark::connect::SparkConnectService::NewStub(grpc::CreateChannel(
+            coordinatorUri,
+            grpc::InsecureChannelCredentials()))) {};
 
   /// Converts Velox query plan to Spark SQL. Supports Values -> Aggregation.
   /// Values node is converted into reading from 'tmp' table.
@@ -63,6 +74,10 @@ class SparkQueryRunner : public velox::exec::test::ReferenceQueryRunner {
   std::vector<velox::RowVectorPtr> execute(const std::string& sql) override;
 
  private:
+  // Generates a random UUID string for Spark. It must be of the format
+  // '00112233-4455-6677-8899-aabbccddeeff'.
+  std::string generateUUID();
+
   velox::memory::MemoryPool* pool() {
     return pool_.get();
   }
@@ -87,6 +102,9 @@ class SparkQueryRunner : public velox::exec::test::ReferenceQueryRunner {
       const std::shared_ptr<const core::ProjectNode>& projectNode);
 
   google::protobuf::Arena arena_;
+  const std::string userId_;
+  const std::string userName_;
+  const std::string sessionId_;
   // Used to make gRPC calls to the SparkConnectService.
   std::unique_ptr<spark::connect::SparkConnectService::Stub> stub_;
   std::shared_ptr<velox::memory::MemoryPool> rootPool_{
@@ -95,11 +113,5 @@ class SparkQueryRunner : public velox::exec::test::ReferenceQueryRunner {
       rootPool_->addLeafChild("leaf")};
   std::shared_ptr<velox::memory::MemoryPool> copyPool_{
       rootPool_->addLeafChild("copy")};
-  inline static const std::string kUserId = "veloxUser";
-  inline static const std::string kUserName = "veloxTest";
-  // A random UUID string. In Spark, it must be of the format
-  // '00112233-4455-6677-8899-aabbccddeeff'.
-  inline static const std::string kSessionId =
-      "70f50bc3-d60c-4ceb-8828-65de803561d8";
 };
 } // namespace facebook::velox::functions::sparksql::fuzzer

@@ -92,7 +92,7 @@ int main(int argc, char** argv) {
 
   auto sparkQueryRunner = std::make_unique<
       facebook::velox::functions::sparksql::fuzzer::SparkQueryRunner>(
-      "localhost:15002");
+      "localhost:15002", "fuzzer", "aggregate");
 
   using Runner = facebook::velox::exec::test::AggregationFuzzerRunner;
   using Options = facebook::velox::exec::test::AggregationFuzzerOptions;
@@ -103,5 +103,7 @@ int main(int argc, char** argv) {
   options.customVerificationFunctions = customVerificationFunctions;
   options.timestampPrecision =
       facebook::velox::VectorFuzzer::Options::TimestampPrecision::kMicroSeconds;
+  options.hiveConfigs = {
+      {facebook::velox::connector::hive::HiveConfig::kReadTimestampUnit, "6"}};
   return Runner::run(initialSeed, std::move(sparkQueryRunner), options);
 }

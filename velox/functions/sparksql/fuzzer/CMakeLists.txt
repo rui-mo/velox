@@ -16,7 +16,7 @@
 file(
   GLOB PROTO_FILES
   RELATIVE ${PROJECT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/proto/spark/connect/*.proto)
+  CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/proto/spark/connect/*.proto)
 foreach(PROTO ${PROTO_FILES})
   get_filename_component(PROTO_DIR ${PROTO} DIRECTORY)
   get_filename_component(PROTO_NAME ${PROTO} NAME_WE)
@@ -48,7 +48,6 @@ add_custom_command(
   DEPENDS protobuf::protoc
   COMMENT "Running PROTO compiler"
   VERBATIM)
-add_custom_target(spark_connect_proto ALL DEPENDS ${PROTO_OUTPUT_FILES})
 
 # Generate grpc headers and sources
 add_custom_command(
@@ -60,7 +59,6 @@ add_custom_command(
   DEPENDS protobuf::protoc
   COMMENT "Running gRPC C++ protocol buffer compiler"
   VERBATIM)
-add_custom_target(spark_connect_grpc_proto ALL DEPENDS ${GRPC_OUTPUT_FILES})
 
 set(SRCS ${PROTO_SRCS} ${GRPC_SRCS} SparkQueryRunner.cpp)
 
@@ -70,24 +68,12 @@ target_include_directories(velox_spark_query_runner
 
 target_link_libraries(
   velox_spark_query_runner
-  velox_fuzzer_util
   velox_exec_test_lib
   velox_arrow_bridge
   gRPC::grpc++
   gRPC::grpc
-  gRPC::gpr
   protobuf::libprotobuf
-  ZLIB::ZLIB
-  re2::re2
-  gRPC::address_sorting
-  c-ares::cares
-  OpenSSL::SSL
-  OpenSSL::Crypto
-  pthread
-  arrow
-  lz4::lz4
-  zstd::zstd
-  Snappy::snappy)
+  arrow)
 
 add_executable(spark_aggregation_fuzzer_test SparkAggregationFuzzerTest.cpp)
 
@@ -101,23 +87,7 @@ target_link_libraries(
   velox_window
   velox_vector_test_lib
   gtest
-  gtest_main
-  gRPC::grpc++
-  gRPC::grpc
-  gRPC::gpr
-  protobuf::libprotobuf
-  ZLIB::ZLIB
-  re2::re2
-  gRPC::address_sorting
-  c-ares::cares
-  gRPC::upb
-  OpenSSL::SSL
-  OpenSSL::Crypto
-  pthread
-  arrow
-  lz4::lz4
-  zstd::zstd
-  Snappy::snappy)
+  gtest_main)
 
 if(${VELOX_BUILD_TESTING})
   add_subdirectory(tests)

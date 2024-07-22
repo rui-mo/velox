@@ -57,7 +57,4 @@ set(gRPC_INSTALL
 FetchContent_MakeAvailable(gRPC)
 add_library(gRPC::grpc ALIAS grpc)
 add_library(gRPC::grpc++ ALIAS grpc++)
-add_library(gRPC::gpr ALIAS gpr)
-add_library(gRPC::address_sorting ALIAS address_sorting)
-add_library(gRPC::upb ALIAS upb)
 add_executable(gRPC::grpc_cpp_plugin ALIAS grpc_cpp_plugin)
