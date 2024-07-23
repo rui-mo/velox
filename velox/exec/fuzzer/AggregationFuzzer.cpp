@@ -315,7 +315,7 @@ bool supportsDistinctInputs(const CallableSignature& signature) {
   }
 
   const auto& arg = signature.args.at(0);
-  if (!arg->isComparable()) {
+  if (!arg->isComparable() || !arg->isOrderable()) {
     return false;
   }
 
