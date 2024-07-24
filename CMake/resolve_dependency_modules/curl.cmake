@@ -24,11 +24,7 @@ string(
 
 resolve_dependency_url(CURL)
 
-set(PREVIOUS_BUILD_TYPE ${CMAKE_BUILD_TYPE})
-set(CMAKE_BUILD_TYPE Release)
 FetchContent_Declare(
   curl
   URL ${VELOX_CURL_SOURCE_URL}
   URL_HASH ${VELOX_CURL_BUILD_SHA256_CHECKSUM})
-FetchContent_MakeAvailable(curl)
-set(CMAKE_BUILD_TYPE ${PREVIOUS_BUILD_TYPE})
