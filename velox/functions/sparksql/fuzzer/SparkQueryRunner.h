@@ -90,10 +90,6 @@ class SparkQueryRunner : public velox::exec::test::ReferenceQueryRunner {
   // them into Velox RowVectors.
   std::vector<velox::RowVectorPtr> readArrowData(const std::string& data);
 
-  // Returns false for unsupported aggregation in Spark.
-  bool supported(
-      const std::shared_ptr<const core::AggregationNode>& aggregationNode);
-
   std::optional<std::string> toSql(
       const std::shared_ptr<const velox::core::AggregationNode>&
           aggregationNode);

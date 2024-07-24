@@ -284,37 +284,8 @@ std::vector<RowVectorPtr> SparkQueryRunner::readArrowData(
   return results;
 }
 
-bool SparkQueryRunner::supported(
-    const std::shared_ptr<const core::AggregationNode>& aggregationNode) {
-  for (const auto& aggregate : aggregationNode->aggregates()) {
-    // Spark aggregation does not support sort keys.
-    if (!aggregate.sortingKeys.empty()) {
-      return false;
-    }
-    if (aggregate.distinct) {
-      for (const auto& inputType : aggregate.rawInputTypes) {
-        // In Spark, grouping keys cannot be map type.
-        if (inputType->kind() == TypeKind::MAP) {
-          return false;
-        }
-      }
-    }
-  }
-  for (const auto& key : aggregationNode->groupingKeys()) {
-    // In Spark, grouping keys cannot be map type.
-    if (key->type()->kind() == TypeKind::MAP) {
-      return false;
-    }
-  }
-  return true;
-}
-
 std::optional<std::string> SparkQueryRunner::toSql(
     const std::shared_ptr<const core::AggregationNode>& aggregationNode) {
-  if (!supported(aggregationNode)) {
-    return std::nullopt;
-  }
-
   // Assume plan is Aggregation over Values.
   VELOX_CHECK(aggregationNode->step() == core::AggregationNode::Step::kSingle);
 

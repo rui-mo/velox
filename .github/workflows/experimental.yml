@@ -214,6 +214,7 @@ jobs:
           _build/debug/velox/functions/sparksql/fuzzer/spark_aggregation_fuzzer_test \
                 --seed ${RANDOM} \
                 --duration_sec 3600 \
+                --enable_sorted_aggregations=false \
                 --logtostderr=1 \
                 --minloglevel=0 \
                 --repro_persist_path=/tmp/spark_aggregate_fuzzer_repro \
