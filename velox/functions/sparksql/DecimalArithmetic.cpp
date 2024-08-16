@@ -24,30 +24,37 @@
 namespace facebook::velox::functions::sparksql {
 namespace {
 
-// Return precision of `aType` and `bType`, set the `aScale` and `bScale`.
-std::pair<int, int> getDecimalPrecisionScales(
-    const Type& aType,
-    const Type& bType,
-    uint8_t& aScale,
-    uint8_t& bScale) {
-  auto [aPrecision, aScaleTmp] = getDecimalPrecisionScale(aType);
-  auto [bPrecision, bScaleTmp] = getDecimalPrecisionScale(bType);
-  aScale = aScaleTmp;
-  bScale = bScaleTmp;
-  return {aPrecision, bPrecision};
+struct BinaryPrecisionScales {
+  uint8_t aPrecision;
+  uint8_t aScale;
+  uint8_t bPrecision;
+  uint8_t bScale;
+};
+
+// Extracts the precisions and scales for two decimal types.
+BinaryPrecisionScales getDecimalPrecisionScales(
+    const TypePtr& aType,
+    const TypePtr& bType) {
+  auto [aPrecision, aScale] = getDecimalPrecisionScale(*aType);
+  auto [bPrecision, bScale] = getDecimalPrecisionScale(*bType);
+  BinaryPrecisionScales result{
+      static_cast<uint8_t>(aPrecision),
+      static_cast<uint8_t>(aScale),
+      static_cast<uint8_t>(bPrecision),
+      static_cast<uint8_t>(bScale)};
+  return result;
 }
 
 struct DecimalAddSubtractBase {
  public:
   void initializeBase(const std::vector<TypePtr>& inputTypes) {
-    auto aType = inputTypes[0];
-    auto bType = inputTypes[1];
-    auto [aPrecision, bPrecision] = getDecimalPrecisionScales(
-        *(inputTypes[0]), *(inputTypes[1]), aScale_, bScale_);
+    auto binary = getDecimalPrecisionScales(inputTypes[0], inputTypes[1]);
+    aScale_ = binary.aScale;
+    bScale_ = binary.bScale;
     aRescale_ = computeRescaleFactor(aScale_, bScale_);
     bRescale_ = computeRescaleFactor(bScale_, aScale_);
-    auto [rPrecision, rScale] =
-        computeResultPrecisionScale(aPrecision, aScale_, bPrecision, bScale_);
+    auto [rPrecision, rScale] = computeResultPrecisionScale(
+        binary.aPrecision, aScale_, binary.bPrecision, bScale_);
     rPrecision_ = rPrecision;
     rScale_ = rScale;
   }
@@ -344,13 +351,12 @@ struct DecimalMultiplyFunction {
       const core::QueryConfig& /*config*/,
       A* /*a*/,
       B* /*b*/) {
-    auto [aPrecision, bPrecision] = getDecimalPrecisionScales(
-        *(inputTypes[0]), *(inputTypes[1]), aScale_, bScale_);
+    auto binary = getDecimalPrecisionScales(inputTypes[0], inputTypes[1]);
     auto [rPrecision, rScale] = DecimalUtil::adjustPrecisionScale(
-        aPrecision + bPrecision + 1, aScale_ + bScale_);
+        binary.aPrecision + binary.bPrecision + 1,
+        binary.aScale + binary.bScale);
     rPrecision_ = rPrecision;
-    rScale_ = rScale;
-    deltaScale_ = aScale_ + bScale_ - rScale_;
+    deltaScale_ = binary.aScale + binary.bScale - rScale;
   }
 
   template <typename R, typename A, typename B>
@@ -438,10 +444,7 @@ struct DecimalMultiplyFunction {
     return result;
   }
 
-  uint8_t aScale_;
-  uint8_t bScale_;
   uint8_t rPrecision_;
-  uint8_t rScale_;
   // The difference between result scale and the sum of aScale and bScale.
   int32_t deltaScale_;
 };
@@ -456,14 +459,11 @@ struct DecimalDivideFunction {
       const core::QueryConfig& /*config*/,
       A* /*a*/,
       B* /*b*/) {
-    auto aType = inputTypes[0];
-    auto bType = inputTypes[1];
-    auto [aPrecision, aScale] = getDecimalPrecisionScale(*aType);
-    auto [bPrecision, bScale] = getDecimalPrecisionScale(*bType);
-    auto [rPrecision, rScale] =
-        computeResultPrecisionScale(aPrecision, aScale, bPrecision, bScale);
+    auto binary = getDecimalPrecisionScales(inputTypes[0], inputTypes[1]);
+    auto [rPrecision, rScale] = computeResultPrecisionScale(
+        binary.aPrecision, binary.aScale, binary.bPrecision, binary.bScale);
     rPrecision_ = rPrecision;
-    aRescale_ = rScale - aScale + bScale;
+    aRescale_ = rScale - binary.aScale + binary.bScale;
   }
 
   template <typename R, typename A, typename B>
