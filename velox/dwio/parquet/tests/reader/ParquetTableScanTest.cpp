@@ -235,6 +235,23 @@ class ParquetTableScanTest : public HiveConnectorTestBase {
   std::vector<std::shared_ptr<connector::ConnectorSplit>> splits_;
 };
 
+TEST_F(ParquetTableScanTest, nonASCII) {
+  std::vector<int32_t> a = {1};
+  std::vector<int32_t> b = {2};
+  std::vector<int32_t> c = {3};
+  loadData(
+      getExampleFilePath("non_ascii.parquet"),
+      ROW({"Товары", "овары", "国Ⅵ"}, {INTEGER(), INTEGER(), INTEGER()}),
+      makeRowVector(
+          {"a", "b", "c"},
+          {
+              makeFlatVector<int32_t>(a),
+              makeFlatVector<int32_t>(b),
+              makeFlatVector<int32_t>(c),
+          }));
+  assertSelect({"Товары", "овары", "国Ⅵ"}, "SELECT a, b, c FROM tmp");
+}
+
 TEST_F(ParquetTableScanTest, basic) {
   loadData(
       getExampleFilePath("sample.parquet"),
