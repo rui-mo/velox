@@ -45,12 +45,12 @@ struct Separators {
   }
 
   char backSlash = '\\';
-  char closeBracket = ']';
-  char dot = '.';
-  char openBracket = '[';
-  char quote = '\"';
-  char wildCard = '*';
-  char unicodeCaret = '^';
+  char closeBracket = '\0';
+  char dot = '\0';
+  char openBracket = '\0';
+  char quote = '\0';
+  char wildCard = '\0';
+  char unicodeCaret = '\0';
 };
 
 class Subfield {
