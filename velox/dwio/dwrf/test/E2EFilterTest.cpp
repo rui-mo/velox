@@ -241,6 +241,54 @@ TEST_F(E2EFilterTest, floatAndDouble) {
       false);
 }
 
+TEST_F(E2EFilterTest, shortDecimal) {
+  for (const auto& type : {
+           "shortdecimal_val:decimal(10, 5)",
+           "shortdecimal_val:decimal(17, 5)",
+       }) {
+    testWithTypes(
+        type,
+        [&]() {
+          makeIntDistribution<int64_t>(
+              "shortdecimal_val",
+              10, // min
+              100, // max
+              22, // repeats
+              19, // rareFrequency
+              -999, // rareMin
+              30000, // rareMax
+              true);
+        },
+        false,
+        {"shortdecimal_val"},
+        20);
+  }
+}
+
+TEST_F(E2EFilterTest, longDecimal) {
+  for (const auto& type : {
+           "longdecimal_val:decimal(30, 10)",
+           "longdecimal_val:decimal(37, 15)",
+       }) {
+    testWithTypes(
+        type,
+        [&]() {
+          makeIntDistribution<int128_t>(
+              "longdecimal_val",
+              10, // min
+              100, // max
+              22, // repeats
+              19, // rareFrequency
+              -999, // rareMin
+              30000, // rareMax
+              true);
+        },
+        true,
+        {},
+        20);
+  }
+}
+
 TEST_F(E2EFilterTest, stringDirect) {
   testutil::TestValue::enable();
   bool coverage[2][2]{};
