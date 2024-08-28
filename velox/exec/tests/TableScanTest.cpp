@@ -41,6 +41,7 @@
 #include "velox/exec/tests/utils/PlanBuilder.h"
 #include "velox/exec/tests/utils/TempDirectoryPath.h"
 #include "velox/expression/ExprToSubfieldFilter.h"
+#include "velox/functions/lib/IsNull.h"
 #include "velox/type/Timestamp.h"
 #include "velox/type/Type.h"
 #include "velox/type/tests/SubfieldFiltersBuilder.h"
@@ -1774,6 +1775,32 @@ TEST_F(TableScanTest, validFileNoData) {
 
   auto op = PlanBuilder().tableScan(rowType, {}, "", rowType).planNode();
   assertQuery(op, split, "");
+}
+
+TEST_F(TableScanTest, decimalFilter) {
+  functions::registerIsNotNullFunction("isnotnull");
+  auto rowType = ROW({"decimal"}, {DECIMAL(38, 18)});
+
+  std::vector<int128_t> values = {HugeInt::parse("1" + std::string(37, '0'))};
+  auto rowVector = makeRowVector({
+      makeFlatVector<int128_t>(values, DECIMAL(38, 18)),
+  });
+  createDuckDbTable({rowVector});
+
+  // auto filePath = facebook::velox::test::getDataFilePath(
+  //     "velox/exec/tests", "data/types.orc");
+  auto filePath =
+      "/home/sparkuser/workspace/rui/velox-2/velox/exec/tests/data/decimal.orc";
+  auto split = HiveConnectorSplitBuilder(filePath)
+                   .start(0)
+                   .length(fs::file_size(filePath))
+                   .fileFormat(dwio::common::FileFormat::ORC)
+                   .build();
+
+  auto op = PlanBuilder()
+                .tableScan(rowType, {}, "isnotnull(decimal)", rowType)
+                .planNode();
+  assertQuery(op, split, "SELECT * FROM tmp");
 }
 
 // An invalid (size = 0) file.
