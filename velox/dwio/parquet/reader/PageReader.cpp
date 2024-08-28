@@ -251,10 +251,7 @@ void PageReader::prepareDataPageV1(const PageHeader& pageHeader, int64_t row) {
   if (!hasChunkRepDefs_ && (numRowsInPage_ == kRowsUnknown || maxDefine_ > 1)) {
     readPageDefLevels();
   }
-
-  if (row != kRepDefOnly) {
-    makeDecoder();
-  }
+  makeDecoder();
 }
 
 void PageReader::prepareDataPageV2(const PageHeader& pageHeader, int64_t row) {
@@ -312,9 +309,7 @@ void PageReader::prepareDataPageV2(const PageHeader& pageHeader, int64_t row) {
   if (numRowsInPage_ == kRowsUnknown) {
     readPageDefLevels();
   }
-  if (row != kRepDefOnly) {
-    makeDecoder();
-  }
+  makeDecoder();
 }
 
 void PageReader::prepareDictionary(const PageHeader& pageHeader) {

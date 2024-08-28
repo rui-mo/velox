@@ -528,6 +528,43 @@ TEST_F(ParquetTableScanTest, reqArrayLegacy) {
       "SELECT UNNEST(array[array['a', 'b'], array[], array['c', 'd']])");
 }
 
+TEST_F(ParquetTableScanTest, nestedFieldFilter) {
+//   auto vector = makeRowVector(
+//       {"struct"},
+//       {
+//           makeRowVector(
+//               {"a0", "a1"},
+//               {
+//                   makeNullableArrayVector<StringView>({
+//                       {{"a", "b", "c"}},
+//                       {{"d", "e", "f"}},
+//                       std::nullopt,
+//                   }),
+//                   makeNullableArrayVector<int32_t>({
+//                       std::nullopt,
+//                       {{1, 2, 3}},
+//                       std::nullopt,
+//                   }),
+//               }),
+//       });
+
+//   auto file = TempFilePath::create();
+//   writeToParquetFile(file->getPath(), {vector}, false);
+
+  loadData(
+      getExampleFilePath("struct_of_array.parquet"),
+      ROW({"struct"},
+          {ROW({"a0", "a1"}, {ARRAY(VARCHAR()), ARRAY(INTEGER())})}),
+      makeRowVector(
+          {"unused"},
+          {
+              makeFlatVector<int32_t>({}),
+          }));
+
+  assertSelectWithFilter(
+      {"struct"}, {}, "struct.a0 is null", "SELECT ROW(NULL, NULL)");
+}
+
 TEST_F(ParquetTableScanTest, readAsLowerCase) {
   auto plan = PlanBuilder(pool_.get())
                   .tableScan(ROW({"a"}, {BIGINT()}), {}, "")

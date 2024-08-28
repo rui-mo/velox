@@ -140,7 +140,7 @@ void SelectiveDecimalColumnReader<DataT>::readHelper(
       if constexpr (std::is_same_v<DataT, int64_t>) {
         processFilter(filter, rows, rawNulls);
       } else {
-        VELOX_UNSUPPORTED("Unsupported filter: {}.", filterKind);
+        VELOX_UNSUPPORTED("Unsupported filter: {}.", (int)filterKind);
       }
       break;
     }
@@ -149,12 +149,12 @@ void SelectiveDecimalColumnReader<DataT>::readHelper(
       if constexpr (std::is_same_v<DataT, int128_t>) {
         processFilter(filter, rows, rawNulls);
       } else {
-        VELOX_UNSUPPORTED("Unsupported filter: {}.", filterKind);
+        VELOX_UNSUPPORTED("Unsupported filter: {}.", (int)filterKind);
       }
       break;
     }
     default:
-      VELOX_UNSUPPORTED("Unsupported filter.");
+      VELOX_UNSUPPORTED("Unsupported filter: {}.", (int)filterKind);
   }
 }
 
