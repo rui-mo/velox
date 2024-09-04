@@ -220,7 +220,10 @@ class Subfield {
   };
 
  public:
-  explicit Subfield(const std::string& path);
+  // Separators: the customized separators to tokenize field name.
+  explicit Subfield(
+      const std::string& path,
+      const std::shared_ptr<Separators>& separators = Separators::get());
 
   explicit Subfield(std::vector<std::unique_ptr<PathElement>>&& path);
 

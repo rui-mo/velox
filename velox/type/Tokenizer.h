@@ -35,30 +35,14 @@ class Tokenizer {
     kFailed,
   };
 
-  virtual ~Tokenizer() = default;
+  // Separators: the customized separators to tokenize field name.
+  explicit Tokenizer(
+      const std::string& path,
+      const std::shared_ptr<Separators>& separators);
 
-  virtual bool hasNext() = 0;
+  bool hasNext();
 
-  virtual std::unique_ptr<Subfield::PathElement> next() = 0;
-
-  static std::unique_ptr<Tokenizer> getInstance(const std::string& path);
-
-  static void registerInstanceFactory(
-      std::function<std::unique_ptr<Tokenizer>(const std::string&)>
-          tokenizerFactory);
-
- private:
-  static std::function<std::unique_ptr<Tokenizer>(const std::string&)>
-      tokenizerFactory_;
-};
-
-class DefaultTokenizer : public Tokenizer {
- public:
-  explicit DefaultTokenizer(const std::string& path);
-
-  bool hasNext() override;
-
-  std::unique_ptr<Subfield::PathElement> next() override;
+  std::unique_ptr<Subfield::PathElement> next();
 
  private:
   const std::string path_;
