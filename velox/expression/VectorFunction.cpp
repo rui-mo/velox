@@ -17,6 +17,7 @@
 #include <unordered_map>
 #include "folly/Singleton.h"
 #include "folly/Synchronized.h"
+#include "velox/expression/DecimalAvgResultGenerator.h"
 #include "velox/expression/SignatureBinder.h"
 
 namespace facebook::velox::exec {
@@ -99,6 +100,14 @@ resolveVectorFunctionWithMetadata(
         for (const auto& signature : entry.signatures) {
           exec::SignatureBinder binder(*signature, argTypes);
           if (binder.tryBind()) {
+            if (functionName == "spark_avg_extract_decimal") {
+              // TODO: register DecimalAvgResultGenerator in a map and find it
+              // through the name.
+              auto generator = std::make_shared<
+                  functions::aggregate::sparksql::DecimalAvgResultGenerator>();
+              return {
+                  {generator->generateResultType(argTypes[0]), entry.metadata}};
+            }
             return {{binder.tryResolveReturnType(), entry.metadata}};
           }
         }

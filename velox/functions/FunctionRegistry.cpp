@@ -27,6 +27,7 @@
 #include "velox/expression/SignatureBinder.h"
 #include "velox/expression/SimpleFunctionRegistry.h"
 #include "velox/expression/VectorFunction.h"
+#include "velox/expression/DecimalAvgResultGenerator.h"
 #include "velox/type/Type.h"
 
 namespace facebook::velox {
@@ -98,6 +99,14 @@ std::optional<bool> isDeterministic(const std::string& functionName) {
 TypePtr resolveFunction(
     const std::string& functionName,
     const std::vector<TypePtr>& argTypes) {
+  if (functionName == "spark_avg_extract_decimal") {
+    // TODO: register DecimalAvgResultGenerator in a map and find it
+    // through the name.
+    auto generator = std::make_shared<
+        functions::aggregate::sparksql::DecimalAvgResultGenerator>();
+    return generator->generateResultType(argTypes[0]);
+  }
+
   // Check if this is a simple function.
   if (auto returnType = resolveSimpleFunction(functionName, argTypes)) {
     return returnType;

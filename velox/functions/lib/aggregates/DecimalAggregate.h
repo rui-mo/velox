@@ -78,7 +78,7 @@ class DecimalAggregate : public exec::Aggregate {
   }
 
   int32_t accumulatorAlignmentSize() const override {
-    return static_cast<int32_t>(sizeof(int128_t));
+    return alignof(LongDecimalWithOverflowState);
   }
 
   void addRawInput(
@@ -327,11 +327,12 @@ class DecimalAggregate : public exec::Aggregate {
     }
   }
 
- private:
+ protected:
   inline LongDecimalWithOverflowState* decimalAccumulator(char* group) {
     return exec::Aggregate::value<LongDecimalWithOverflowState>(group);
   }
 
+ private:
   DecodedVector decodedRaw_;
   DecodedVector decodedPartial_;
 };

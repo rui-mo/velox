@@ -110,5 +110,179 @@ TEST_F(AverageAggregationTest, avgAllNulls) {
   assertQuery(plan, expected);
 }
 
+TEST_F(AverageAggregationTest, avgDecimal) {
+  int64_t kRescale = DecimalUtil::kPowersOfTen[4];
+  // Short decimal aggregation.
+  auto shortDecimal = makeNullableFlatVector<int64_t>(
+      {1'000, 2'000, 3'000, 4'000, 5'000, std::nullopt}, DECIMAL(12, 1));
+  std::vector<RowVectorPtr> inputRows = {makeRowVector({shortDecimal})};
+  std::vector<RowVectorPtr> expectedResult = {makeRowVector(
+      {makeNullableFlatVector<int64_t>({3'000 * kRescale}, DECIMAL(16, 5))})};
+  testAggregations(inputRows, {}, {"spark_avg(c0)"}, {}, expectedResult);
+  testAggregationsWithCompanion(
+      inputRows,
+      [](auto& /*builder*/) {},
+      {},
+      {"spark_avg(c0)"},
+      {{DECIMAL(16, 5)}},
+      {},
+      expectedResult);
+
+  // Long decimal aggregation.
+  inputRows = {makeRowVector({makeNullableFlatVector<int128_t>(
+      {HugeInt::build(10, 100),
+       HugeInt::build(10, 200),
+       HugeInt::build(10, 300),
+       HugeInt::build(10, 400),
+       HugeInt::build(10, 500),
+       std::nullopt},
+      DECIMAL(23, 4))})};
+  expectedResult = {makeRowVector({makeFlatVector(
+      std::vector<int128_t>{HugeInt::build(10, 300) * kRescale},
+      DECIMAL(27, 8))})};
+  testAggregations(inputRows, {}, {"spark_avg(c0)"}, {}, expectedResult);
+  testAggregationsWithCompanion(
+      inputRows,
+      [](auto& /*builder*/) {},
+      {},
+      {"spark_avg(c0)"},
+      {{DECIMAL(27, 8)}},
+      {},
+      expectedResult);
+
+  // The total sum overflows the max int128_t limit.
+  std::vector<int128_t> rawVector;
+  for (int i = 0; i < 10; ++i) {
+    rawVector.push_back(DecimalUtil::kLongDecimalMax);
+  }
+  inputRows = {
+      makeRowVector({makeFlatVector<int128_t>(rawVector, DECIMAL(38, 0))})};
+  expectedResult = {makeRowVector({makeNullableFlatVector(
+      std::vector<std::optional<int128_t>>{std::nullopt}, DECIMAL(38, 4))})};
+  testAggregations(inputRows, {}, {"spark_avg(c0)"}, {}, expectedResult);
+  //   testAggregationsWithCompanion(
+  //       inputRows,
+  //       [](auto& /*builder*/) {},
+  //       {},
+  //       {"spark_avg(c0)"},
+  //       {{DECIMAL(38, 4)}},
+  //       {},
+  //       expectedResult);
+
+  // The total sum underflows the min int128_t limit.
+  rawVector.clear();
+  auto underFlowTestResult = makeNullableFlatVector(
+      std::vector<std::optional<int128_t>>{std::nullopt}, DECIMAL(38, 4));
+  for (int i = 0; i < 10; ++i) {
+    rawVector.push_back(DecimalUtil::kLongDecimalMin);
+  }
+  inputRows = {
+      makeRowVector({makeFlatVector<int128_t>(rawVector, DECIMAL(38, 0))})};
+  expectedResult = {makeRowVector({underFlowTestResult})};
+  testAggregations(inputRows, {}, {"spark_avg(c0)"}, {}, expectedResult);
+  //   testAggregationsWithCompanion(
+  //       inputRows,
+  //       [](auto& /*builder*/) {},
+  //       {},
+  //       {"spark_avg(c0)"},
+  //       {{DECIMAL(38, 4)}},
+  //       {},
+  //       expectedResult);
+
+  // Test constant vector.
+  inputRows = {makeRowVector({makeConstant<int64_t>(100, 10, DECIMAL(15, 2))})};
+  expectedResult = {makeRowVector(
+      {makeFlatVector(std::vector<int128_t>{100 * kRescale}, DECIMAL(19, 6))})};
+  testAggregations(inputRows, {}, {"spark_avg(c0)"}, {}, expectedResult);
+  testAggregationsWithCompanion(
+      inputRows,
+      [](auto& /*builder*/) {},
+      {},
+      {"spark_avg(c0)"},
+      {{DECIMAL(19, 6)}},
+      {},
+      expectedResult);
+
+  auto newSize = shortDecimal->size() * 2;
+  auto indices = makeIndices(newSize, [&](int row) { return row / 2; });
+  auto dictVector =
+      VectorTestBase::wrapInDictionary(indices, newSize, shortDecimal);
+
+  inputRows = {makeRowVector({dictVector})};
+  expectedResult = {makeRowVector({makeFlatVector(
+      std::vector<int64_t>{3'000 * kRescale}, DECIMAL(16, 5))})};
+  testAggregations(inputRows, {}, {"spark_avg(c0)"}, {}, expectedResult);
+  testAggregationsWithCompanion(
+      inputRows,
+      [](auto& /*builder*/) {},
+      {},
+      {"spark_avg(c0)"},
+      {{DECIMAL(16, 5)}},
+      {},
+      expectedResult);
+
+  // Decimal average aggregation with multiple groups.
+  inputRows = {
+      makeRowVector(
+          {makeNullableFlatVector<int32_t>({1, 1}),
+           makeFlatVector<int64_t>({37220, 53450}, DECIMAL(15, 2))}),
+      makeRowVector(
+          {makeNullableFlatVector<int32_t>({2, 2}),
+           makeFlatVector<int64_t>({10410, 9250}, DECIMAL(15, 2))}),
+      makeRowVector(
+          {makeNullableFlatVector<int32_t>({3, 3}),
+           makeFlatVector<int64_t>({-12783, 0}, DECIMAL(15, 2))}),
+      makeRowVector(
+          {makeNullableFlatVector<int32_t>({1, 2}),
+           makeFlatVector<int64_t>({23178, 41093}, DECIMAL(15, 2))}),
+      makeRowVector(
+          {makeNullableFlatVector<int32_t>({2, 3}),
+           makeFlatVector<int64_t>({-10023, 5290}, DECIMAL(15, 2))}),
+  };
+
+  expectedResult = {
+      makeRowVector(
+          {makeNullableFlatVector<int32_t>({1}),
+           makeFlatVector(std::vector<int128_t>{379493333}, DECIMAL(19, 6))}),
+      makeRowVector(
+          {makeNullableFlatVector<int32_t>({2}),
+           makeFlatVector(std::vector<int128_t>{126825000}, DECIMAL(19, 6))}),
+      makeRowVector(
+          {makeNullableFlatVector<int32_t>({3}),
+           makeFlatVector(std::vector<int128_t>{-24976667}, DECIMAL(19, 6))})};
+
+  testAggregations(inputRows, {"c0"}, {"spark_avg(c1)"}, expectedResult);
+  testAggregationsWithCompanion(
+      inputRows,
+      [](auto& /*builder*/) {},
+      {"c0"},
+      {"spark_avg(c1)"},
+      {{DECIMAL(19, 6)}},
+      {},
+      expectedResult);
+}
+
+TEST_F(AverageAggregationTest, avgDecimalWithMultipleRowVectors) {
+  int64_t kRescale = DecimalUtil::kPowersOfTen[4];
+  auto inputRows = {
+      makeRowVector({makeFlatVector<int128_t>({100, 200}, DECIMAL(28, 2))}),
+      makeRowVector({makeFlatVector<int128_t>({300, 400}, DECIMAL(28, 2))}),
+      makeRowVector({makeFlatVector<int128_t>({500, 600}, DECIMAL(28, 2))}),
+  };
+
+  auto expectedResult = {makeRowVector(
+      {makeFlatVector(std::vector<int128_t>{350 * kRescale}, DECIMAL(32, 6))})};
+
+  testAggregations(inputRows, {}, {"spark_avg(c0)"}, expectedResult);
+  testAggregationsWithCompanion(
+      inputRows,
+      [](auto& /*builder*/) {},
+      {},
+      {"spark_avg(c0)"},
+      {{DECIMAL(32, 6)}},
+      {},
+      expectedResult);
+}
+
 } // namespace
 } // namespace facebook::velox::functions::aggregate::sparksql::test

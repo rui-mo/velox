@@ -50,7 +50,8 @@ velox_add_library(
   SpecialFormRegistry.cpp
   SwitchExpr.cpp
   TryExpr.cpp
-  VectorFunction.cpp)
+  VectorFunction.cpp
+  DecimalAvgResultGenerator.cpp)
 
 velox_link_libraries(
   velox_expression
