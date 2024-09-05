@@ -20,6 +20,35 @@
 
 namespace facebook::velox::functions::sparksql::test {
 namespace {
+class RoundTest : public SparkFunctionBaseTest {
+ protected:
+  template <typename T>
+  void runRoundWithDecimalTest(
+      const std::vector<std::tuple<T, int32_t, T>>& data) {
+    auto result = evaluate<SimpleVector<T>>(
+        "round(c0, c1)",
+        makeRowVector(
+            {makeFlatVector<T, 0>(data), makeFlatVector<int32_t, 1>(data)}));
+    for (int32_t i = 0; i < data.size(); ++i) {
+      ASSERT_EQ(result->valueAt(i), std::get<2>(data[i]));
+    }
+  }
+
+  template <typename T>
+  std::vector<std::tuple<T, int32_t, T>> testRoundWithDecFloatAndDoubleData() {
+    return {
+        {0.575, 2, 0.58},
+        {0.5549999999999999, 2, 0.55},
+        {1.12345678901234567, 8, 1.12345679},
+        {-0.98765432109876543, 5, -0.98765},
+        {12345.67890123456789, 6, 12345.678901},
+        {0.499999999999994, 0, 0}};
+  }
+};
+
+TEST_F(RoundTest, roundWithDecimal) {
+  runRoundWithDecimalTest<double>(testRoundWithDecFloatAndDoubleData<double>());
+}
 
 class PmodTest : public SparkFunctionBaseTest {
  protected:
