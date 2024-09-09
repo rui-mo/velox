@@ -309,7 +309,7 @@ void CastExpr::applyCastKernel(
           ToKind == TypeKind::INTEGER || ToKind == TypeKind::BIGINT ||
           ToKind == TypeKind::HUGEINT) {
         if constexpr (TPolicy::throwOnUnicode) {
-          VELOX_CHECK(
+          VELOX_USER_CHECK(
               functions::stringCore::isAscii(
                   inputRowValue.data(), inputRowValue.size()),
               "Unicode characters are not supported for conversion to integer types");
