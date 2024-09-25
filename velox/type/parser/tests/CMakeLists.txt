@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(velox_type_parser_test TypeParserTest.cpp)
+add_executable(velox_type_parser_test ParserUtilTest.cpp TypeParserTest.cpp)
 
 add_test(NAME velox_type_parser_test COMMAND velox_type_parser_test)
 

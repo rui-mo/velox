@@ -52,4 +52,13 @@ std::pair<std::string, std::shared_ptr<const Type>> inferTypeWithSpaces(
       fieldName, typeFromString(allWords.substr(fieldName.size() + 1)));
 }
 
+void toLowerUTF8(std::string& str) {
+  std::locale const utf8("en_US.UTF-8");
+  std::wstring_convert<std::codecvt_utf8<wchar_t>, wchar_t> converter;
+  std::wstring wideStr = converter.from_bytes(str);
+  std::transform(wideStr.begin(), wideStr.end(), wideStr.begin(),
+                  [&utf8](wchar_t c){ return std::towlower(c); });
+  str = converter.to_bytes(wideStr);
+}
+
 } // namespace facebook::velox

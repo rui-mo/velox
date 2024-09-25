@@ -36,4 +36,7 @@ std::pair<std::string, TypePtr> inferTypeWithSpaces(
     std::vector<std::string>& words,
     bool cannotHaveFieldName = false);
 
+// Convert UTF-8 string to lowercase.
+void toLowerUTF8(std::string& str);
+
 } // namespace facebook::velox
