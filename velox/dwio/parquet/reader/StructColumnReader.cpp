@@ -37,7 +37,7 @@ StructColumnReader::StructColumnReader(
   std::vector<int> missingFields;
   for (auto i = 0; i < childSpecs.size(); ++i) {
     auto childSpec = childSpecs[i];
-    if (childSpec->isConstant() || isChildMissing(*childSpec)) {
+    if (childSpec->isConstant()) {
       childSpec->setSubscript(kConstantChildSpecSubscript);
       continue;
     }
