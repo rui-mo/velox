@@ -91,6 +91,7 @@ target_link_libraries(
   velox_hive_connector
   velox_link_libs
   velox_type_tz
+  velox_functions_spark
   ${TEST_LINK_LIBS})
 
 if(${VELOX_ENABLE_ARROW})

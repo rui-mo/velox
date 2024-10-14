@@ -31,6 +31,7 @@
 
 #include "velox/connectors/hive/HiveConfig.h" // @manual=//velox/connectors/hive:velox_hive_connector_parquet
 #include "velox/dwio/parquet/writer/Writer.h" // @manual
+#include "velox/functions/sparksql/Register.h"
 
 using namespace facebook::velox;
 using namespace facebook::velox::exec;
@@ -45,6 +46,7 @@ class ParquetTableScanTest : public HiveConnectorTestBase {
   void SetUp() override {
     HiveConnectorTestBase::SetUp();
     parquet::registerParquetReaderFactory();
+    functions::sparksql::registerFunctions("");
   }
 
   void assertSelect(
@@ -560,6 +562,47 @@ TEST_F(ParquetTableScanTest, filterOnNestedArray) {
 
   assertSelectWithFilter(
       {"struct"}, {}, "struct.a0 is null", "SELECT ROW(NULL, NULL)");
+}
+
+TEST_F(ParquetTableScanTest, subfieldFilter) {
+  auto vector = makeRowVector(
+      {"c0", "c1"},
+      {
+          makeFlatVector<int32_t>({0, 1}),
+          makeRowVector(
+              {"first", "last"},
+              {
+                  makeNullableFlatVector<StringView>({
+                      "Janet",
+                      "Jim",
+                  }),
+                  makeNullableFlatVector<StringView>({
+                      "Jones",
+                      "Jones",
+                  }),
+              }),
+      });
+  auto file = TempFilePath::create();
+  writeToParquetFile(file->getPath(), {vector}, false);
+
+  auto rowType =
+      ROW({"c0", "c1"},
+          {INTEGER(), ROW({"first", "last"}, {VARCHAR(), VARCHAR()})});
+  loadData(file->getPath(), rowType, vector);
+
+  auto outputType =
+      ROW({"c0", "c1"},
+          {INTEGER(), ROW({"middle", "last"}, {VARCHAR(), VARCHAR()})});
+  auto plan =
+      PlanBuilder()
+          .tableScan(
+              outputType,
+              {},
+              "isnotnull(c1.last) and isnotnull(c1.middle) and c1.last = 'Jones'")
+          .planNode();
+
+  auto split = makeSplit(file->getPath());
+  assertQuery(plan, {split}, "SELECT c0, c1 FROM tmp");
 }
 
 TEST_F(ParquetTableScanTest, readAsLowerCase) {
