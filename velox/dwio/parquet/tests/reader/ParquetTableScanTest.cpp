@@ -602,7 +602,7 @@ TEST_F(ParquetTableScanTest, subfieldFilter) {
           .planNode();
 
   auto split = makeSplit(file->getPath());
-  assertQuery(plan, {split}, "SELECT c0, c1 FROM tmp");
+  assertQuery(plan, {split}, "SELECT c0, c1 FROM tmp where false");
 }
 
 TEST_F(ParquetTableScanTest, readAsLowerCase) {

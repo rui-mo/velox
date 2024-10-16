@@ -195,6 +195,7 @@ void SelectiveStructColumnReaderBase::read(
     if (isChildConstant(*childSpec)) {
       if (!testFilterOnConstant(*childSpec)) {
         activeRows = {};
+        setOutputRows(activeRows);
         break;
       }
       continue;
