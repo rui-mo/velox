@@ -64,6 +64,7 @@ bool toSubfield(const core::ITypedExpr* field, common::Subfield& subfield) {
     } else if (
         auto* dereference =
             dynamic_cast<const core::DereferenceTypedExpr*>(current)) {
+      return false;
       const auto& name = dereference->name();
       // When the field name is empty string, it typically means that the field
       // name was not set in the parent type.
@@ -77,6 +78,9 @@ bool toSubfield(const core::ITypedExpr* field, common::Subfield& subfield) {
       break;
     }
 
+    if (!current->inputs().empty()) {
+      return false;
+    }
     if (current->inputs().empty()) {
       break;
     }
